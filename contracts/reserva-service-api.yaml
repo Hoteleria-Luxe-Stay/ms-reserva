@@ -1,0 +1,704 @@
+openapi: 3.0.3
+info:
+  title: Reserva Service API
+  description: |
+    Microservicio de gestion de reservas y clientes.
+    **Responsable**: Integrante 3
+    **Rama Git**: feature/reserva-service
+  version: 1.0.0
+  contact:
+    name: Equipo Reserva
+
+servers:
+  - url: http://localhost:8083/api/v1
+    description: Local development
+  - url: http://reserva-service:8083/api/v1
+    description: Docker/K8s internal
+
+tags:
+  - name: reservas
+    description: Gestion de reservas
+  - name: clientes
+    description: Gestion de clientes
+  - name: mis-reservas
+    description: Reservas del usuario autenticado
+  - name: dashboard
+    description: Estadisticas del dashboard admin
+
+paths:
+  # ==================== RESERVAS PUBLICAS ====================
+  /reservas:
+    post:
+      tags: [reservas]
+      summary: Crear nueva reserva
+      operationId: crearReserva
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservaRequest'
+      responses:
+        '201':
+          description: Reserva creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservaCreatedResponse'
+        '400':
+          description: Error de validacion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Habitacion no disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /reservas/{id}:
+    get:
+      tags: [reservas]
+      summary: Obtener reserva por ID
+      operationId: obtenerReserva
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Reserva encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservaResponse'
+        '404':
+          description: No encontrada
+
+  /reservas/{id}/confirmar-pago:
+    post:
+      tags: [reservas]
+      summary: Confirmar pago de reserva
+      operationId: confirmarPago
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Pago confirmado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservaResponse'
+        '400':
+          description: Estado invalido para confirmar
+
+  /reservas/{id}/cancelar:
+    post:
+      tags: [reservas]
+      summary: Cancelar reserva
+      operationId: cancelarReserva
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Reserva cancelada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservaResponse'
+
+  # ==================== MIS RESERVAS (Usuario autenticado) ====================
+  /mis-reservas:
+    get:
+      tags: [mis-reservas]
+      summary: Listar mis reservas
+      operationId: listarMisReservas
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: fechaInicio
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: fechaFin
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: estado
+          in: query
+          schema:
+            type: string
+            enum: [PENDIENTE, CONFIRMADA, CANCELADA]
+      responses:
+        '200':
+          description: Lista de mis reservas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MisReservasResponse'
+
+  /mis-reservas/{id}:
+    get:
+      tags: [mis-reservas]
+      summary: Obtener detalle de mi reserva
+      operationId: obtenerMiReserva
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Reserva encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservaResponse'
+        '403':
+          description: No autorizado para ver esta reserva
+        '404':
+          description: Reserva no encontrada
+
+    put:
+      tags: [mis-reservas]
+      summary: Actualizar fechas de mi reserva
+      operationId: actualizarMiReserva
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservaUpdateRequest'
+      responses:
+        '200':
+          description: Reserva actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservaResponse'
+
+  # ==================== ADMIN RESERVAS ====================
+  /admin/reservas:
+    get:
+      tags: [reservas]
+      summary: Listar todas las reservas (admin)
+      operationId: listarReservasAdmin
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: dni
+          in: query
+          schema:
+            type: string
+          description: Filtrar por DNI de cliente
+        - name: estado
+          in: query
+          schema:
+            type: string
+            enum: [PENDIENTE, CONFIRMADA, CANCELADA]
+      responses:
+        '200':
+          description: Lista de reservas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReservaListResponse'
+
+  /admin/reservas/{id}:
+    put:
+      tags: [reservas]
+      summary: Actualizar reserva (admin)
+      operationId: actualizarReservaAdmin
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservaAdminUpdateRequest'
+      responses:
+        '200':
+          description: Reserva actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservaListResponse'
+
+    delete:
+      tags: [reservas]
+      summary: Eliminar reserva (admin)
+      operationId: eliminarReserva
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Reserva eliminada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  # ==================== DASHBOARD ADMIN ====================
+  /admin/dashboard/stats:
+    get:
+      tags: [dashboard]
+      summary: Obtener estadisticas del dashboard (admin)
+      operationId: obtenerDashboardStats
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Estadisticas del dashboard
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardStatsResponse'
+
+  # ==================== CLIENTES ====================
+  /clientes:
+    get:
+      tags: [clientes]
+      summary: Listar clientes (admin)
+      operationId: listarClientes
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Lista de clientes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClienteResponse'
+
+  /clientes/{id}:
+    get:
+      tags: [clientes]
+      summary: Obtener cliente por ID
+      operationId: obtenerCliente
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Cliente encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClienteResponse'
+
+  /clientes/dni/{dni}:
+    get:
+      tags: [clientes]
+      summary: Buscar cliente por DNI
+      operationId: buscarClientePorDni
+      parameters:
+        - name: dni
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cliente encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClienteResponse'
+        '404':
+          description: Cliente no encontrado
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+
+  schemas:
+    ClienteRequest:
+      type: object
+      required: [dni, nombre, apellido, email]
+      properties:
+        dni:
+          type: string
+          minLength: 8
+          maxLength: 20
+        nombre:
+          type: string
+          maxLength: 100
+        apellido:
+          type: string
+          maxLength: 100
+        email:
+          type: string
+          format: email
+        telefono:
+          type: string
+          maxLength: 20
+
+    ClienteResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        dni:
+          type: string
+        nombre:
+          type: string
+        apellido:
+          type: string
+        email:
+          type: string
+        telefono:
+          type: string
+
+    ReservaRequest:
+      type: object
+      required: [hotelId, fechaInicio, fechaFin, habitacionesIds, cliente]
+      properties:
+        hotelId:
+          type: integer
+          format: int64
+        fechaInicio:
+          type: string
+          format: date
+        fechaFin:
+          type: string
+          format: date
+        habitacionesIds:
+          type: array
+          items:
+            type: integer
+            format: int64
+          minItems: 1
+        cliente:
+          $ref: '#/components/schemas/ClienteRequest'
+
+    ReservaUpdateRequest:
+      type: object
+      required: [fechaInicio, fechaFin]
+      properties:
+        fechaInicio:
+          type: string
+          format: date
+        fechaFin:
+          type: string
+          format: date
+
+    ReservaAdminUpdateRequest:
+      type: object
+      required: [fechaInicio, fechaFin, estado, cliente, habitaciones]
+      properties:
+        fechaInicio:
+          type: string
+          format: date
+        fechaFin:
+          type: string
+          format: date
+        estado:
+          type: string
+          enum: [PENDIENTE, CONFIRMADA, CANCELADA]
+        hotelId:
+          type: integer
+          format: int64
+        cliente:
+          $ref: '#/components/schemas/ClienteRequest'
+        habitaciones:
+          type: array
+          items:
+            type: integer
+            format: int64
+
+    ReservaCreatedResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        fechaReserva:
+          type: string
+          format: date
+        fechaInicio:
+          type: string
+          format: date
+        fechaFin:
+          type: string
+          format: date
+        total:
+          type: number
+          format: double
+        estado:
+          type: string
+        mensaje:
+          type: string
+
+    ReservaResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        fechaReserva:
+          type: string
+          format: date
+        fechaInicio:
+          type: string
+          format: date
+        fechaFin:
+          type: string
+          format: date
+        total:
+          type: number
+          format: double
+        estado:
+          type: string
+        hotel:
+          $ref: '#/components/schemas/HotelSimple'
+        cliente:
+          $ref: '#/components/schemas/ClienteResponse'
+        detalles:
+          type: array
+          items:
+            $ref: '#/components/schemas/DetalleReservaResponse'
+
+    ReservaListResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        fechaReserva:
+          type: string
+          format: date
+        fechaInicio:
+          type: string
+          format: date
+        fechaFin:
+          type: string
+          format: date
+        total:
+          type: number
+          format: double
+        estado:
+          type: string
+        hotel:
+          $ref: '#/components/schemas/HotelSimple'
+        cliente:
+          $ref: '#/components/schemas/ClienteSimple'
+        detalles:
+          type: array
+          items:
+            $ref: '#/components/schemas/DetalleSimple'
+
+    MisReservasResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        fechaInicio:
+          type: string
+          format: date
+        fechaFin:
+          type: string
+          format: date
+        total:
+          type: number
+          format: double
+        estado:
+          type: string
+        hotelNombre:
+          type: string
+        cantidadHabitaciones:
+          type: integer
+
+    HotelSimple:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        nombre:
+          type: string
+        direccion:
+          type: string
+        departamento:
+          $ref: '#/components/schemas/DepartamentoSimple'
+
+    DepartamentoSimple:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        nombre:
+          type: string
+
+    ClienteSimple:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        nombre:
+          type: string
+        apellido:
+          type: string
+        email:
+          type: string
+        telefono:
+          type: string
+        dni:
+          type: string
+
+    DetalleReservaResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        habitacionId:
+          type: integer
+          format: int64
+        precioNoche:
+          type: number
+          format: double
+
+    DetalleSimple:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        habitacionId:
+          type: integer
+          format: int64
+        precioNoche:
+          type: number
+          format: double
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+
+    DashboardStatsResponse:
+      type: object
+      properties:
+        totalDepartamentos:
+          type: integer
+          format: int32
+        totalHoteles:
+          type: integer
+          format: int32
+        totalHabitaciones:
+          type: integer
+          format: int64
+        totalReservas:
+          type: integer
+          format: int32
+        reservasPorEstado:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+        ingresosTotales:
+          type: number
+          format: double
+        hotelesPorDepartamento:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+        reservasPorMes:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+        ingresosPorMes:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+        topHoteles:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardTopHotel'
+        reservasRecientes:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardReservaReciente'
+
+    DashboardTopHotel:
+      type: object
+      properties:
+        nombre:
+          type: string
+        reservas:
+          type: integer
+          format: int64
+
+    DashboardReservaReciente:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        cliente:
+          type: string
+        hotel:
+          type: string
+        fechaInicio:
+          type: string
+          format: date
+        fechaFin:
+          type: string
+          format: date
+        total:
+          type: number
+          format: double
+        estado:
+          type: string
+
+    ErrorResponse:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        status:
+          type: integer
+        error:
+          type: string
+        message:
+          type: string
+        path:
+          type: string
