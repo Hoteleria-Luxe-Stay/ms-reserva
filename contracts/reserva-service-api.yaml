@@ -435,6 +435,9 @@ components:
           items:
             type: integer
             format: int64
+        motivoCancelacion:
+          type: string
+          description: Motivo de cancelacion cuando el administrador cancela la reserva
 
     ReservaCreatedResponse:
       type: object
@@ -451,10 +454,15 @@ components:
         fechaFin:
           type: string
           format: date
+        fechaCancelacion:
+          type: string
+          format: date
         total:
           type: number
           format: double
         estado:
+          type: string
+        motivoCancelacion:
           type: string
         mensaje:
           type: string
@@ -474,10 +482,15 @@ components:
         fechaFin:
           type: string
           format: date
+        fechaCancelacion:
+          type: string
+          format: date
         total:
           type: number
           format: double
         estado:
+          type: string
+        motivoCancelacion:
           type: string
         hotel:
           $ref: '#/components/schemas/HotelSimple'
@@ -503,10 +516,15 @@ components:
         fechaFin:
           type: string
           format: date
+        fechaCancelacion:
+          type: string
+          format: date
         total:
           type: number
           format: double
         estado:
+          type: string
+        motivoCancelacion:
           type: string
         hotel:
           $ref: '#/components/schemas/HotelSimple'
@@ -529,10 +547,15 @@ components:
         fechaFin:
           type: string
           format: date
+        fechaCancelacion:
+          type: string
+          format: date
         total:
           type: number
           format: double
         estado:
+          type: string
+        motivoCancelacion:
           type: string
         hotelNombre:
           type: string

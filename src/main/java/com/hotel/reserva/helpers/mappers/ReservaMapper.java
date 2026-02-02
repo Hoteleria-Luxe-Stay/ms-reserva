@@ -22,8 +22,10 @@ public class ReservaMapper {
         response.setFechaReserva(reserva.getFechaReserva());
         response.setFechaInicio(reserva.getFechaInicio());
         response.setFechaFin(reserva.getFechaFin());
+        response.setFechaCancelacion(reserva.getFechaCancelacion());
         response.setTotal(reserva.getTotal());
         response.setEstado(reserva.getEstado());
+        response.setMotivoCancelacion(reserva.getMotivoCancelacion());
         response.setHotel(toHotelSimple(reserva));
         response.setCliente(ClienteMapper.toResponse(reserva.getCliente()));
         response.setDetalles(reserva.getDetalles().stream()
@@ -38,8 +40,10 @@ public class ReservaMapper {
         response.setFechaReserva(reserva.getFechaReserva());
         response.setFechaInicio(reserva.getFechaInicio());
         response.setFechaFin(reserva.getFechaFin());
+        response.setFechaCancelacion(reserva.getFechaCancelacion());
         response.setTotal(reserva.getTotal());
         response.setEstado(reserva.getEstado());
+        response.setMotivoCancelacion(reserva.getMotivoCancelacion());
         response.setHotel(toHotelSimple(reserva));
         response.setCliente(ClienteMapper.toSimple(reserva.getCliente()));
         response.setDetalles(reserva.getDetalles().stream()
@@ -54,8 +58,10 @@ public class ReservaMapper {
         response.setFechaReserva(reserva.getFechaReserva());
         response.setFechaInicio(reserva.getFechaInicio());
         response.setFechaFin(reserva.getFechaFin());
+        response.setFechaCancelacion(reserva.getFechaCancelacion());
         response.setTotal(reserva.getTotal());
         response.setEstado(reserva.getEstado());
+        response.setMotivoCancelacion(reserva.getMotivoCancelacion());
         response.setMensaje("Reserva creada exitosamente");
         return response;
     }
@@ -65,8 +71,10 @@ public class ReservaMapper {
         response.setId(reserva.getId());
         response.setFechaInicio(reserva.getFechaInicio());
         response.setFechaFin(reserva.getFechaFin());
+        response.setFechaCancelacion(reserva.getFechaCancelacion());
         response.setTotal(reserva.getTotal());
         response.setEstado(reserva.getEstado());
+        response.setMotivoCancelacion(reserva.getMotivoCancelacion());
         response.setHotelNombre(reserva.getHotelNombre());
         response.setCantidadHabitaciones(reserva.getDetalles() != null ? reserva.getDetalles().size() : 0);
         return response;

@@ -12,10 +12,8 @@ import com.hotel.reserva.helpers.exceptions.BusinessException;
 import com.hotel.reserva.helpers.exceptions.ConflictException;
 import com.hotel.reserva.helpers.exceptions.EntityNotFoundException;
 import com.hotel.reserva.helpers.exceptions.ValidationException;
-import com.hotel.reserva.infrastructure.events.EventPublisher;
-import com.hotel.reserva.infrastructure.events.ReservaCancelledEvent;
-import com.hotel.reserva.infrastructure.events.ReservaConfirmedEvent;
-import com.hotel.reserva.infrastructure.events.ReservaCreatedEvent;
+import com.hotel.reserva.infrastructure.events.ReservaNotificationEvent;
+import com.hotel.reserva.infrastructure.events.ReservaNotificationPublisher;
 import com.hotel.reserva.internal.HotelInternalApi;
 import com.hotel.reserva.internal.dto.HabitacionInternalResponse;
 import com.hotel.reserva.internal.dto.HotelInternalResponse;
@@ -36,16 +34,16 @@ public class ReservaService {
     private final ReservaRepository reservaRepository;
     private final ClienteService clienteService;
     private final HotelInternalApi hotelInternalApi;
-    private final EventPublisher eventPublisher;
+    private final ReservaNotificationPublisher reservaNotificationPublisher;
 
     public ReservaService(ReservaRepository reservaRepository,
                           ClienteService clienteService,
                           HotelInternalApi hotelInternalApi,
-                          EventPublisher eventPublisher) {
+                          ReservaNotificationPublisher reservaNotificationPublisher) {
         this.reservaRepository = reservaRepository;
         this.clienteService = clienteService;
         this.hotelInternalApi = hotelInternalApi;
-        this.eventPublisher = eventPublisher;
+        this.reservaNotificationPublisher = reservaNotificationPublisher;
     }
 
     public List<Reserva> listarReservas(String dni, String estado) {
@@ -131,16 +129,7 @@ public class ReservaService {
 
         Reserva savedReserva = reservaRepository.save(reserva);
 
-        // Publicar evento de reserva creada
-        ReservaCreatedEvent event = new ReservaCreatedEvent(
-                savedReserva.getId(),
-                cliente.getNombre() + " " + cliente.getApellido(),
-                cliente.getEmail(),
-                savedReserva.getHotelNombre(),
-                savedReserva.getFechaInicio().toString(),
-                savedReserva.getFechaFin().toString()
-        );
-        eventPublisher.publishReservaCreated(event);
+        publishReservaNotification("CREATED", savedReserva);
 
         return savedReserva;
     }
@@ -148,6 +137,7 @@ public class ReservaService {
     @Transactional
     public Reserva actualizarReservaAdmin(Long id, ReservaAdminUpdateRequest request) {
         Reserva reserva = buscarPorId(id);
+        String estadoAnterior = reserva.getEstado();
 
         validarFechas(request.getFechaInicio(), request.getFechaFin());
 
@@ -173,7 +163,20 @@ public class ReservaService {
             actualizarHabitacionesReserva(reserva, request.getHabitaciones(), request.getFechaInicio(), request.getFechaFin());
         }
 
-        return reservaRepository.save(reserva);
+        if (request.getEstado() == ReservaAdminUpdateRequest.EstadoEnum.CANCELADA
+                && !ESTADO_CANCELADA.equals(estadoAnterior)) {
+            reserva.setFechaCancelacion(LocalDate.now());
+            reserva.setMotivoCancelacion(request.getMotivoCancelacion());
+        }
+
+        Reserva savedReserva = reservaRepository.save(reserva);
+
+        if (request.getEstado() == ReservaAdminUpdateRequest.EstadoEnum.CANCELADA
+                && !ESTADO_CANCELADA.equals(estadoAnterior)) {
+            publishReservaNotification("CANCELLED_ADMIN", savedReserva);
+        }
+
+        return savedReserva;
     }
 
     @Transactional
@@ -205,17 +208,7 @@ public class ReservaService {
         reserva.setEstado(ESTADO_CONFIRMADA);
         Reserva savedReserva = reservaRepository.save(reserva);
 
-        // Publicar evento de reserva confirmada
-        Cliente cliente = savedReserva.getCliente();
-        String codigoConfirmacion = "CONF-" + savedReserva.getId() + "-" + System.currentTimeMillis();
-        ReservaConfirmedEvent event = new ReservaConfirmedEvent(
-                savedReserva.getId(),
-                cliente.getNombre() + " " + cliente.getApellido(),
-                cliente.getEmail(),
-                savedReserva.getHotelNombre(),
-                codigoConfirmacion
-        );
-        eventPublisher.publishReservaConfirmed(event);
+        publishReservaNotification("CONFIRMED", savedReserva);
 
         return savedReserva;
     }
@@ -224,18 +217,11 @@ public class ReservaService {
     public Reserva cancelarReserva(Long id) {
         Reserva reserva = buscarPorId(id);
         reserva.setEstado(ESTADO_CANCELADA);
+        reserva.setFechaCancelacion(LocalDate.now());
+        reserva.setMotivoCancelacion("Cancelada por el usuario");
         Reserva savedReserva = reservaRepository.save(reserva);
 
-        // Publicar evento de reserva cancelada
-        Cliente cliente = savedReserva.getCliente();
-        ReservaCancelledEvent event = new ReservaCancelledEvent(
-                savedReserva.getId(),
-                cliente.getNombre() + " " + cliente.getApellido(),
-                cliente.getEmail(),
-                savedReserva.getHotelNombre(),
-                "Cancelada por el usuario"
-        );
-        eventPublisher.publishReservaCancelled(event);
+        publishReservaNotification("CANCELLED", savedReserva);
 
         return savedReserva;
     }
@@ -353,5 +339,32 @@ public class ReservaService {
             reserva.setDepartamentoId(hotel.getDepartamento().getId());
             reserva.setDepartamentoNombre(hotel.getDepartamento().getNombre());
         }
+    }
+
+    private void publishReservaNotification(String eventType, Reserva reserva) {
+        Cliente cliente = reserva.getCliente();
+        List<ReservaNotificationEvent.HabitacionDetalle> habitaciones = reserva.getDetalles().stream()
+                .map(detalle -> new ReservaNotificationEvent.HabitacionDetalle(
+                        detalle.getHabitacionId(),
+                        detalle.getPrecioNoche()
+                ))
+                .toList();
+
+        ReservaNotificationEvent event = new ReservaNotificationEvent(
+                eventType,
+                reserva.getId(),
+                cliente != null ? cliente.getNombre() + " " + cliente.getApellido() : null,
+                cliente != null ? cliente.getEmail() : null,
+                reserva.getHotelNombre(),
+                reserva.getHotelDireccion(),
+                reserva.getFechaInicio() != null ? reserva.getFechaInicio().toString() : null,
+                reserva.getFechaFin() != null ? reserva.getFechaFin().toString() : null,
+                reserva.getFechaCancelacion() != null ? reserva.getFechaCancelacion().toString() : null,
+                reserva.getTotal(),
+                reserva.getEstado(),
+                reserva.getMotivoCancelacion(),
+                habitaciones
+        );
+        reservaNotificationPublisher.publish(event);
     }
 }

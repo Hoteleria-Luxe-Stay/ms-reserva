@@ -7,12 +7,12 @@ import com.hotel.reserva.core.reserva.model.Reserva;
 import com.hotel.reserva.core.reserva.service.ReservaService;
 import com.hotel.reserva.helpers.exceptions.UnauthorizedException;
 import com.hotel.reserva.helpers.mappers.ReservaMapper;
-import com.hotel.reserva.internal.AuthInternalApi;
 import com.hotel.reserva.internal.dto.AuthTokenValidationResponse;
-import org.springframework.http.HttpHeaders;
+import com.hotel.reserva.infrastructure.security.AuthContextFilter;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.context.request.NativeWebRequest;
+import org.springframework.web.context.request.RequestAttributes;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -22,14 +22,11 @@ import java.util.Optional;
 public class MisReservasController implements MisReservasApi {
 
     private final ReservaService reservaService;
-    private final AuthInternalApi authInternalApi;
     private final NativeWebRequest request;
 
     public MisReservasController(ReservaService reservaService,
-                                 AuthInternalApi authInternalApi,
                                  NativeWebRequest request) {
         this.reservaService = reservaService;
-        this.authInternalApi = authInternalApi;
         this.request = request;
     }
 
@@ -38,7 +35,7 @@ public class MisReservasController implements MisReservasApi {
             LocalDate fechaInicio,
             LocalDate fechaFin,
             String estado) {
-        Long userId = resolveUserId(resolveAuthorization());
+        Long userId = resolveUserId();
         List<Reserva> reservas = reservaService.buscarReservasPorUsuarioIdYFechas(userId, fechaInicio, fechaFin, estado);
         List<MisReservasResponse> response = reservas.stream()
                 .map(ReservaMapper::toMisReservasResponse)
@@ -50,7 +47,7 @@ public class MisReservasController implements MisReservasApi {
     @Override
     public ResponseEntity<ReservaResponse> obtenerMiReserva(
             Long id) {
-        Long userId = resolveUserId(resolveAuthorization());
+        Long userId = resolveUserId();
         Reserva reserva = reservaService.buscarPorId(id);
         validarReservaPerteneceUsuario(reserva, userId);
         return ResponseEntity.ok(ReservaMapper.toResponse(reserva));
@@ -60,7 +57,7 @@ public class MisReservasController implements MisReservasApi {
     public ResponseEntity<ReservaResponse> actualizarMiReserva(
             Long id,
             ReservaUpdateRequest request) {
-        Long userId = resolveUserId(resolveAuthorization());
+        Long userId = resolveUserId();
         Reserva reserva = reservaService.buscarPorId(id);
         validarReservaPerteneceUsuario(reserva, userId);
 
@@ -68,37 +65,29 @@ public class MisReservasController implements MisReservasApi {
         return ResponseEntity.ok(ReservaMapper.toResponse(actualizada));
     }
 
-    private Long resolveUserId(String authorization) {
-        if (authorization == null || !authorization.startsWith("Bearer ")) {
-            throw new UnauthorizedException("Token inválido o ausente");
-        }
-
-        String token = authorization.substring(7);
-        AuthTokenValidationResponse response = authInternalApi.validateToken(token)
-                .orElseThrow(() -> new UnauthorizedException("Token inválido o expirado"));
-
-        if (!Boolean.TRUE.equals(response.getValid())) {
+    private Long resolveUserId() {
+        AuthTokenValidationResponse response = getAuth();
+        if (response == null || !Boolean.TRUE.equals(response.getValid()) || response.getUserId() == null) {
             throw new UnauthorizedException("Token inválido o expirado");
         }
-
-        if (response.getUserId() == null) {
-            throw new UnauthorizedException("Token inválido o expirado");
-        }
-
         return response.getUserId();
-    }
-
-    private String resolveAuthorization() {
-        Optional<NativeWebRequest> request = getRequest();
-        if (request.isEmpty()) {
-            return null;
-        }
-        return request.get().getHeader(HttpHeaders.AUTHORIZATION);
     }
 
     @Override
     public Optional<NativeWebRequest> getRequest() {
         return Optional.ofNullable(request);
+    }
+
+    private AuthTokenValidationResponse getAuth() {
+        Optional<NativeWebRequest> request = getRequest();
+        if (request.isEmpty()) {
+            return null;
+        }
+        Object value = request.get().getAttribute(AuthContextFilter.AUTH_CONTEXT_KEY, RequestAttributes.SCOPE_REQUEST);
+        if (value instanceof AuthTokenValidationResponse response) {
+            return response;
+        }
+        return null;
     }
 
     private void validarReservaPerteneceUsuario(Reserva reserva, Long userId) {

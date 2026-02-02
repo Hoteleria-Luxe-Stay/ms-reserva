@@ -25,8 +25,10 @@ public class Reserva {
     private LocalDate fechaReserva;
     private LocalDate fechaInicio;
     private LocalDate fechaFin;
+    private LocalDate fechaCancelacion;
     private double total;
     private String estado;
+    private String motivoCancelacion;
 
     private Long hotelId;
     private String hotelNombre;
@@ -78,6 +80,14 @@ public class Reserva {
         this.fechaFin = fechaFin;
     }
 
+    public LocalDate getFechaCancelacion() {
+        return fechaCancelacion;
+    }
+
+    public void setFechaCancelacion(LocalDate fechaCancelacion) {
+        this.fechaCancelacion = fechaCancelacion;
+    }
+
     public double getTotal() {
         return total;
     }
@@ -92,6 +102,14 @@ public class Reserva {
 
     public void setEstado(String estado) {
         this.estado = estado;
+    }
+
+    public String getMotivoCancelacion() {
+        return motivoCancelacion;
+    }
+
+    public void setMotivoCancelacion(String motivoCancelacion) {
+        this.motivoCancelacion = motivoCancelacion;
     }
 
     public Long getHotelId() {

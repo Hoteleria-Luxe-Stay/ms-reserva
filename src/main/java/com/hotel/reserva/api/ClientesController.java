@@ -4,12 +4,13 @@ import com.hotel.reserva.api.dto.ClienteResponse;
 import com.hotel.reserva.core.cliente.model.Cliente;
 import com.hotel.reserva.core.cliente.service.ClienteService;
 import com.hotel.reserva.helpers.mappers.ClienteMapper;
-import com.hotel.reserva.internal.AuthInternalApi;
 import com.hotel.reserva.internal.dto.AuthTokenValidationResponse;
+import com.hotel.reserva.infrastructure.security.AuthContextFilter;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.context.request.NativeWebRequest;
+import org.springframework.web.context.request.RequestAttributes;
 
 import java.util.List;
 import java.util.Optional;
@@ -18,16 +19,16 @@ import java.util.Optional;
 public class ClientesController implements ClientesApi {
 
     private final ClienteService clienteService;
-    private final AuthInternalApi authInternalApi;
+    private final NativeWebRequest request;
 
-    public ClientesController(ClienteService clienteService, AuthInternalApi authInternalApi) {
+    public ClientesController(ClienteService clienteService, NativeWebRequest request) {
         this.clienteService = clienteService;
-        this.authInternalApi = authInternalApi;
+        this.request = request;
     }
 
     @Override
     public ResponseEntity<List<ClienteResponse>> listarClientes() {
-        AuthTokenValidationResponse auth = resolveAuth();
+        AuthTokenValidationResponse auth = getAuth();
         if (auth == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
@@ -44,7 +45,7 @@ public class ClientesController implements ClientesApi {
 
     @Override
     public ResponseEntity<ClienteResponse> obtenerCliente(Long id) {
-        AuthTokenValidationResponse auth = resolveAuth();
+        AuthTokenValidationResponse auth = getAuth();
         if (auth == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
@@ -58,7 +59,7 @@ public class ClientesController implements ClientesApi {
 
     @Override
     public ResponseEntity<ClienteResponse> buscarClientePorDni(String dni) {
-        AuthTokenValidationResponse auth = resolveAuth();
+        AuthTokenValidationResponse auth = getAuth();
         if (auth == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
@@ -70,21 +71,21 @@ public class ClientesController implements ClientesApi {
         return ResponseEntity.ok(ClienteMapper.toResponse(cliente));
     }
 
-    private AuthTokenValidationResponse resolveAuth() {
-        String authorization = resolveAuthorization();
-        if (authorization == null || !authorization.startsWith("Bearer ")) {
-            return null;
-        }
-        String token = authorization.substring(7);
-        return authInternalApi.validateToken(token).orElse(null);
+    @Override
+    public Optional<NativeWebRequest> getRequest() {
+        return Optional.ofNullable(request);
     }
 
-    private String resolveAuthorization() {
+    private AuthTokenValidationResponse getAuth() {
         Optional<NativeWebRequest> request = getRequest();
         if (request.isEmpty()) {
             return null;
         }
-        return request.get().getHeader("Authorization");
+        Object value = request.get().getAttribute(AuthContextFilter.AUTH_CONTEXT_KEY, RequestAttributes.SCOPE_REQUEST);
+        if (value instanceof AuthTokenValidationResponse response) {
+            return response;
+        }
+        return null;
     }
 
     private boolean isAdmin(AuthTokenValidationResponse auth) {
