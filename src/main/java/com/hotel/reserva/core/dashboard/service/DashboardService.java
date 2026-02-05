@@ -3,9 +3,9 @@ package com.hotel.reserva.core.dashboard.service;
 import com.hotel.reserva.api.dto.DashboardReservaReciente;
 import com.hotel.reserva.api.dto.DashboardStatsResponse;
 import com.hotel.reserva.api.dto.DashboardTopHotel;
-import com.hotel.reserva.core.detalle_reserva.model.DetalleReserva;
 import com.hotel.reserva.core.reserva.model.Reserva;
 import com.hotel.reserva.core.reserva.repository.ReservaRepository;
+import com.hotel.reserva.internal.HotelInternalApi;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -13,11 +13,8 @@ import java.time.YearMonth;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -28,53 +25,31 @@ public class DashboardService {
     private static final String ESTADO_PENDIENTE = "PENDIENTE";
 
     private final ReservaRepository reservaRepository;
+    private final HotelInternalApi hotelInternalApi;
 
-    public DashboardService(ReservaRepository reservaRepository) {
+    public DashboardService(ReservaRepository reservaRepository,
+                            HotelInternalApi hotelInternalApi) {
         this.reservaRepository = reservaRepository;
+        this.hotelInternalApi = hotelInternalApi;
     }
 
     public DashboardStatsResponse obtenerEstadisticas() {
         List<Reserva> reservas = reservaRepository.findAll();
 
         DashboardStatsResponse response = new DashboardStatsResponse();
-        response.setTotalDepartamentos(contarDepartamentos(reservas));
-        response.setTotalHoteles(contarHoteles(reservas));
-        response.setTotalHabitaciones(contarHabitaciones(reservas));
+        response.setTotalDepartamentos(hotelInternalApi.getTotalDepartamentos());
+        response.setTotalHoteles(hotelInternalApi.getTotalHoteles());
+        response.setTotalHabitaciones((long) hotelInternalApi.getTotalHabitaciones());
         response.setTotalReservas(reservas.size());
         response.setReservasPorEstado(calcularReservasPorEstado(reservas));
         response.setIngresosTotales(calcularIngresosTotales(reservas));
-        response.setHotelesPorDepartamento(calcularHotelesPorDepartamento(reservas));
+        response.setHotelesPorDepartamento(hotelInternalApi.getHotelesPorDepartamentoReal());
         response.setReservasPorMes(calcularReservasPorMes(reservas));
         response.setIngresosPorMes(calcularIngresosPorMes(reservas));
         response.setTopHoteles(calcularTopHoteles(reservas));
         response.setReservasRecientes(calcularReservasRecientes(reservas));
 
         return response;
-    }
-
-    private int contarDepartamentos(List<Reserva> reservas) {
-        return (int) reservas.stream()
-                .map(Reserva::getDepartamentoId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .count();
-    }
-
-    private int contarHoteles(List<Reserva> reservas) {
-        return (int) reservas.stream()
-                .map(Reserva::getHotelId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .count();
-    }
-
-    private long contarHabitaciones(List<Reserva> reservas) {
-        return reservas.stream()
-                .flatMap(reserva -> reserva.getDetalles().stream())
-                .map(DetalleReserva::getHabitacionId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .count();
     }
 
     private Map<String, Long> calcularReservasPorEstado(List<Reserva> reservas) {
@@ -96,32 +71,6 @@ public class DashboardService {
                 .filter(r -> ESTADO_CONFIRMADA.equals(r.getEstado()))
                 .mapToDouble(Reserva::getTotal)
                 .sum();
-    }
-
-    private Map<String, Long> calcularHotelesPorDepartamento(List<Reserva> reservas) {
-        Map<Long, Set<Long>> hotelesPorDepartamento = new LinkedHashMap<>();
-        Map<Long, String> nombresDepartamento = new HashMap<>();
-
-        for (Reserva reserva : reservas) {
-            if (reserva.getDepartamentoId() == null || reserva.getHotelId() == null) {
-                continue;
-            }
-            hotelesPorDepartamento
-                    .computeIfAbsent(reserva.getDepartamentoId(), key -> new LinkedHashSet<>())
-                    .add(reserva.getHotelId());
-
-            if (reserva.getDepartamentoNombre() != null) {
-                nombresDepartamento.putIfAbsent(reserva.getDepartamentoId(), reserva.getDepartamentoNombre());
-            }
-        }
-
-        Map<String, Long> resultado = new LinkedHashMap<>();
-        for (Map.Entry<Long, Set<Long>> entry : hotelesPorDepartamento.entrySet()) {
-            String nombre = nombresDepartamento.getOrDefault(entry.getKey(), "Departamento " + entry.getKey());
-            resultado.put(nombre, (long) entry.getValue().size());
-        }
-
-        return resultado;
     }
 
     private Map<String, Long> calcularReservasPorMes(List<Reserva> reservas) {

@@ -34,7 +34,9 @@ public class ReservasController implements ReservasApi {
 
     @Override
     public ResponseEntity<ReservaCreatedResponse> crearReserva(ReservaRequest request) {
-        Reserva reserva = reservaService.crearReserva(request, null);
+        AuthTokenValidationResponse auth = getAuth();
+        Long userId = (auth != null && Boolean.TRUE.equals(auth.getValid())) ? auth.getUserId() : null;
+        Reserva reserva = reservaService.crearReserva(request, userId);
         return ResponseEntity.status(HttpStatus.CREATED).body(ReservaMapper.toCreatedResponse(reserva));
     }
 
@@ -42,6 +44,20 @@ public class ReservasController implements ReservasApi {
     public ResponseEntity<ReservaResponse> obtenerReserva(Long id) {
         Reserva reserva = reservaService.buscarPorId(id);
         return ResponseEntity.ok(ReservaMapper.toResponse(reserva));
+    }
+
+    @Override
+    public ResponseEntity<ReservaListResponse> obtenerReservaAdmin(Long id) {
+        AuthTokenValidationResponse auth = getAuth();
+        if (auth == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        if (!isAdmin(auth)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        Reserva reserva = reservaService.buscarPorId(id);
+        return ResponseEntity.ok(ReservaMapper.toListResponse(reserva));
     }
 
     @Override

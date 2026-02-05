@@ -214,6 +214,23 @@ paths:
                   $ref: '#/components/schemas/ReservaListResponse'
 
   /admin/reservas/{id}:
+    get:
+      tags: [reservas]
+      summary: Obtener reserva por ID (admin)
+      operationId: obtenerReservaAdmin
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Reserva encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservaListResponse'
+        '404':
+          description: No encontrada
     put:
       tags: [reservas]
       summary: Actualizar reserva (admin)

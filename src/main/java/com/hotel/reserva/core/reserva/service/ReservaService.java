@@ -94,7 +94,7 @@ public class ReservaService {
     @Transactional
     public Reserva crearReserva(ReservaRequest request, Long userId) {
         validarReservaRequest(request);
-        validarFechas(request.getFechaInicio(), request.getFechaFin());
+        validarFechasAdmin(request.getFechaInicio(), request.getFechaFin());
 
         HotelInternalResponse hotel = hotelInternalApi.getHotelById(request.getHotelId())
                 .orElseThrow(() -> new EntityNotFoundException("Hotel", request.getHotelId()));
@@ -263,6 +263,15 @@ public class ReservaService {
             );
         }
 
+        if (fechaFin.isBefore(fechaInicio) || fechaFin.isEqual(fechaInicio)) {
+            throw new BusinessException(
+                    "La fecha de salida debe ser posterior a la fecha de entrada",
+                    "FECHA_FIN_INVALIDA"
+            );
+        }
+    }
+
+    private void validarFechasAdmin(LocalDate fechaInicio, LocalDate fechaFin) {
         if (fechaFin.isBefore(fechaInicio) || fechaFin.isEqual(fechaInicio)) {
             throw new BusinessException(
                     "La fecha de salida debe ser posterior a la fecha de entrada",
