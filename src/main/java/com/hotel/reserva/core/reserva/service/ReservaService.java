@@ -362,6 +362,7 @@ public class ReservaService {
         ReservaNotificationEvent event = new ReservaNotificationEvent(
                 eventType,
                 reserva.getId(),
+                cliente != null ? cliente.getUserId() : null,
                 cliente != null ? cliente.getNombre() + " " + cliente.getApellido() : null,
                 cliente != null ? cliente.getEmail() : null,
                 reserva.getHotelNombre(),
