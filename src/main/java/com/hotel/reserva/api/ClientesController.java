@@ -5,12 +5,11 @@ import com.hotel.reserva.core.cliente.model.Cliente;
 import com.hotel.reserva.core.cliente.service.ClienteService;
 import com.hotel.reserva.helpers.mappers.ClienteMapper;
 import com.hotel.reserva.internal.dto.AuthTokenValidationResponse;
-import com.hotel.reserva.infrastructure.security.AuthContextFilter;
+import com.hotel.reserva.infrastructure.security.AuthUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.context.request.NativeWebRequest;
-import org.springframework.web.context.request.RequestAttributes;
 
 import java.util.List;
 import java.util.Optional;
@@ -28,11 +27,11 @@ public class ClientesController implements ClientesApi {
 
     @Override
     public ResponseEntity<List<ClienteResponse>> listarClientes() {
-        AuthTokenValidationResponse auth = getAuth();
+        AuthTokenValidationResponse auth = AuthUtils.getAuth(getRequest());
         if (auth == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        if (!isAdmin(auth)) {
+        if (!AuthUtils.isAdmin(auth)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 
@@ -45,11 +44,11 @@ public class ClientesController implements ClientesApi {
 
     @Override
     public ResponseEntity<ClienteResponse> obtenerCliente(Long id) {
-        AuthTokenValidationResponse auth = getAuth();
+        AuthTokenValidationResponse auth = AuthUtils.getAuth(getRequest());
         if (auth == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        if (!isAdmin(auth)) {
+        if (!AuthUtils.isAdmin(auth)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 
@@ -59,11 +58,11 @@ public class ClientesController implements ClientesApi {
 
     @Override
     public ResponseEntity<ClienteResponse> buscarClientePorDni(String dni) {
-        AuthTokenValidationResponse auth = getAuth();
+        AuthTokenValidationResponse auth = AuthUtils.getAuth(getRequest());
         if (auth == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        if (!isAdmin(auth)) {
+        if (!AuthUtils.isAdmin(auth)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 
@@ -76,19 +75,4 @@ public class ClientesController implements ClientesApi {
         return Optional.ofNullable(request);
     }
 
-    private AuthTokenValidationResponse getAuth() {
-        Optional<NativeWebRequest> request = getRequest();
-        if (request.isEmpty()) {
-            return null;
-        }
-        Object value = request.get().getAttribute(AuthContextFilter.AUTH_CONTEXT_KEY, RequestAttributes.SCOPE_REQUEST);
-        if (value instanceof AuthTokenValidationResponse response) {
-            return response;
-        }
-        return null;
-    }
-
-    private boolean isAdmin(AuthTokenValidationResponse auth) {
-        return auth.getRole() != null && "ADMIN".equalsIgnoreCase(auth.getRole());
-    }
 }

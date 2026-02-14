@@ -6,6 +6,7 @@ import com.hotel.reserva.api.dto.ReservaUpdateRequest;
 import com.hotel.reserva.core.cliente.model.Cliente;
 import com.hotel.reserva.core.cliente.service.ClienteService;
 import com.hotel.reserva.core.detalle_reserva.model.DetalleReserva;
+import com.hotel.reserva.core.detalle_reserva.repository.DetalleReservaRepository;
 import com.hotel.reserva.core.reserva.model.Reserva;
 import com.hotel.reserva.core.reserva.repository.ReservaRepository;
 import com.hotel.reserva.helpers.exceptions.BusinessException;
@@ -32,15 +33,18 @@ public class ReservaService {
     private static final String ESTADO_CANCELADA = "CANCELADA";
 
     private final ReservaRepository reservaRepository;
+    private final DetalleReservaRepository detalleReservaRepository;
     private final ClienteService clienteService;
     private final HotelInternalApi hotelInternalApi;
     private final ReservaNotificationPublisher reservaNotificationPublisher;
 
     public ReservaService(ReservaRepository reservaRepository,
+                          DetalleReservaRepository detalleReservaRepository,
                           ClienteService clienteService,
                           HotelInternalApi hotelInternalApi,
                           ReservaNotificationPublisher reservaNotificationPublisher) {
         this.reservaRepository = reservaRepository;
+        this.detalleReservaRepository = detalleReservaRepository;
         this.clienteService = clienteService;
         this.hotelInternalApi = hotelInternalApi;
         this.reservaNotificationPublisher = reservaNotificationPublisher;
@@ -66,29 +70,8 @@ public class ReservaService {
     }
 
     public List<Reserva> buscarReservasPorUsuarioIdYFechas(Long userId, LocalDate fechaInicio, LocalDate fechaFin, String estado) {
-        List<Reserva> reservas = reservaRepository.findByClienteUserId(userId);
-
-        if (estado != null && !estado.isBlank()) {
-            reservas = reservas.stream()
-                    .filter(reserva -> estado.equals(reserva.getEstado()))
-                    .toList();
-        }
-
-        if (fechaInicio != null && fechaFin != null) {
-            reservas = reservas.stream()
-                    .filter(r -> !r.getFechaInicio().isBefore(fechaInicio) && !r.getFechaFin().isAfter(fechaFin))
-                    .toList();
-        } else if (fechaInicio != null) {
-            reservas = reservas.stream()
-                    .filter(r -> !r.getFechaInicio().isBefore(fechaInicio))
-                    .toList();
-        } else if (fechaFin != null) {
-            reservas = reservas.stream()
-                    .filter(r -> !r.getFechaFin().isAfter(fechaFin))
-                    .toList();
-        }
-
-        return reservas;
+        String estadoFiltro = (estado != null && !estado.isBlank()) ? estado : null;
+        return reservaRepository.findByUserIdAndFilters(userId, fechaInicio, fechaFin, estadoFiltro);
     }
 
     @Transactional
@@ -296,10 +279,17 @@ public class ReservaService {
                 );
             }
 
-            if (!hotelInternalApi.checkDisponibilidad(habitacionId, inicio, fin)) {
+            if (!hotelInternalApi.checkDisponibilidad(habitacionId)) {
                 throw new ConflictException(
-                        "La habitación " + habitacionId + " no está disponible para las fechas seleccionadas",
+                        "La habitación " + habitacionId + " no está disponible",
                         "HABITACION_NO_DISPONIBLE"
+                );
+            }
+
+            if (detalleReservaRepository.existsReservaConflicto(habitacionId, inicio, fin)) {
+                throw new ConflictException(
+                        "La habitación " + habitacionId + " ya tiene una reserva para las fechas seleccionadas",
+                        "HABITACION_FECHAS_OCUPADAS"
                 );
             }
 

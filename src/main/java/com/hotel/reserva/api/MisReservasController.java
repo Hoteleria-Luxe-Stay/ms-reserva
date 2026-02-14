@@ -8,11 +8,10 @@ import com.hotel.reserva.core.reserva.service.ReservaService;
 import com.hotel.reserva.helpers.exceptions.UnauthorizedException;
 import com.hotel.reserva.helpers.mappers.ReservaMapper;
 import com.hotel.reserva.internal.dto.AuthTokenValidationResponse;
-import com.hotel.reserva.infrastructure.security.AuthContextFilter;
+import com.hotel.reserva.infrastructure.security.AuthUtils;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.context.request.NativeWebRequest;
-import org.springframework.web.context.request.RequestAttributes;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -66,7 +65,7 @@ public class MisReservasController implements MisReservasApi {
     }
 
     private Long resolveUserId() {
-        AuthTokenValidationResponse response = getAuth();
+        AuthTokenValidationResponse response = AuthUtils.getAuth(getRequest());
         if (response == null || !Boolean.TRUE.equals(response.getValid()) || response.getUserId() == null) {
             throw new UnauthorizedException("Token inválido o expirado");
         }
@@ -76,18 +75,6 @@ public class MisReservasController implements MisReservasApi {
     @Override
     public Optional<NativeWebRequest> getRequest() {
         return Optional.ofNullable(request);
-    }
-
-    private AuthTokenValidationResponse getAuth() {
-        Optional<NativeWebRequest> request = getRequest();
-        if (request.isEmpty()) {
-            return null;
-        }
-        Object value = request.get().getAttribute(AuthContextFilter.AUTH_CONTEXT_KEY, RequestAttributes.SCOPE_REQUEST);
-        if (value instanceof AuthTokenValidationResponse response) {
-            return response;
-        }
-        return null;
     }
 
     private void validarReservaPerteneceUsuario(Reserva reserva, Long userId) {

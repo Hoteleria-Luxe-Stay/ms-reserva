@@ -10,12 +10,11 @@ import com.hotel.reserva.core.reserva.model.Reserva;
 import com.hotel.reserva.core.reserva.service.ReservaService;
 import com.hotel.reserva.helpers.mappers.ReservaMapper;
 import com.hotel.reserva.internal.dto.AuthTokenValidationResponse;
-import com.hotel.reserva.infrastructure.security.AuthContextFilter;
+import com.hotel.reserva.infrastructure.security.AuthUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.context.request.NativeWebRequest;
-import org.springframework.web.context.request.RequestAttributes;
 
 import java.util.List;
 import java.util.Optional;
@@ -34,25 +33,38 @@ public class ReservasController implements ReservasApi {
 
     @Override
     public ResponseEntity<ReservaCreatedResponse> crearReserva(ReservaRequest request) {
-        AuthTokenValidationResponse auth = getAuth();
-        Long userId = (auth != null && Boolean.TRUE.equals(auth.getValid())) ? auth.getUserId() : null;
+        AuthTokenValidationResponse auth = AuthUtils.getAuth(getRequest());
+        if (auth == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        Long userId = auth.getUserId();
         Reserva reserva = reservaService.crearReserva(request, userId);
         return ResponseEntity.status(HttpStatus.CREATED).body(ReservaMapper.toCreatedResponse(reserva));
     }
 
     @Override
     public ResponseEntity<ReservaResponse> obtenerReserva(Long id) {
+        AuthTokenValidationResponse auth = AuthUtils.getAuth(getRequest());
+        if (auth == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
         Reserva reserva = reservaService.buscarPorId(id);
+
+        if (!AuthUtils.isAdmin(auth) && !esReservaDelUsuario(reserva, auth.getUserId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
         return ResponseEntity.ok(ReservaMapper.toResponse(reserva));
     }
 
     @Override
     public ResponseEntity<ReservaListResponse> obtenerReservaAdmin(Long id) {
-        AuthTokenValidationResponse auth = getAuth();
+        AuthTokenValidationResponse auth = AuthUtils.getAuth(getRequest());
         if (auth == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        if (!isAdmin(auth)) {
+        if (!AuthUtils.isAdmin(auth)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 
@@ -62,23 +74,45 @@ public class ReservasController implements ReservasApi {
 
     @Override
     public ResponseEntity<ReservaResponse> confirmarPago(Long id) {
-        Reserva reserva = reservaService.confirmarPago(id);
+        AuthTokenValidationResponse auth = AuthUtils.getAuth(getRequest());
+        if (auth == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        Reserva reserva = reservaService.buscarPorId(id);
+
+        if (!AuthUtils.isAdmin(auth) && !esReservaDelUsuario(reserva, auth.getUserId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        reserva = reservaService.confirmarPago(id);
         return ResponseEntity.ok(ReservaMapper.toResponse(reserva));
     }
 
     @Override
     public ResponseEntity<ReservaResponse> cancelarReserva(Long id) {
-        Reserva reserva = reservaService.cancelarReserva(id);
+        AuthTokenValidationResponse auth = AuthUtils.getAuth(getRequest());
+        if (auth == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        Reserva reserva = reservaService.buscarPorId(id);
+
+        if (!AuthUtils.isAdmin(auth) && !esReservaDelUsuario(reserva, auth.getUserId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        reserva = reservaService.cancelarReserva(id);
         return ResponseEntity.ok(ReservaMapper.toResponse(reserva));
     }
 
     @Override
     public ResponseEntity<List<ReservaListResponse>> listarReservasAdmin(String dni, String estado) {
-        AuthTokenValidationResponse auth = getAuth();
+        AuthTokenValidationResponse auth = AuthUtils.getAuth(getRequest());
         if (auth == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        if (!isAdmin(auth)) {
+        if (!AuthUtils.isAdmin(auth)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 
@@ -88,11 +122,11 @@ public class ReservasController implements ReservasApi {
 
     @Override
     public ResponseEntity<ReservaListResponse> actualizarReservaAdmin(Long id, ReservaAdminUpdateRequest request) {
-        AuthTokenValidationResponse auth = getAuth();
+        AuthTokenValidationResponse auth = AuthUtils.getAuth(getRequest());
         if (auth == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        if (!isAdmin(auth)) {
+        if (!AuthUtils.isAdmin(auth)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 
@@ -102,11 +136,11 @@ public class ReservasController implements ReservasApi {
 
     @Override
     public ResponseEntity<MessageResponse> eliminarReserva(Long id) {
-        AuthTokenValidationResponse auth = getAuth();
+        AuthTokenValidationResponse auth = AuthUtils.getAuth(getRequest());
         if (auth == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        if (!isAdmin(auth)) {
+        if (!AuthUtils.isAdmin(auth)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 
@@ -122,19 +156,10 @@ public class ReservasController implements ReservasApi {
         return Optional.ofNullable(request);
     }
 
-    private AuthTokenValidationResponse getAuth() {
-        Optional<NativeWebRequest> request = getRequest();
-        if (request.isEmpty()) {
-            return null;
-        }
-        Object value = request.get().getAttribute(AuthContextFilter.AUTH_CONTEXT_KEY, RequestAttributes.SCOPE_REQUEST);
-        if (value instanceof AuthTokenValidationResponse response) {
-            return response;
-        }
-        return null;
+    private boolean esReservaDelUsuario(Reserva reserva, Long userId) {
+        return reserva.getCliente() != null
+                && reserva.getCliente().getUserId() != null
+                && reserva.getCliente().getUserId().equals(userId);
     }
 
-    private boolean isAdmin(AuthTokenValidationResponse auth) {
-        return auth.getRole() != null && "ADMIN".equalsIgnoreCase(auth.getRole());
-    }
 }

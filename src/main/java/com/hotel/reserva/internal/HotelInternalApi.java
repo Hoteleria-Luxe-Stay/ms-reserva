@@ -82,16 +82,15 @@ public class HotelInternalApi {
     }
 
     /**
-     * Verifica la disponibilidad de una habitacion.
+     * Verifica si la habitación está físicamente disponible (estado = DISPONIBLE).
+     * La verificación de solapamiento de fechas se hace localmente en ReservaService.
      */
-    public boolean checkDisponibilidad(Long habitacionId, LocalDate fechaInicio, LocalDate fechaFin) {
+    public boolean checkDisponibilidad(Long habitacionId) {
         try {
             String url = String.format(
-                    "%s/api/v1/habitaciones/%d/disponibilidad?fechaInicio=%s&fechaFin=%s",
+                    "%s/api/v1/habitaciones/%d/disponibilidad",
                     hotelServiceUrl,
-                    habitacionId,
-                    fechaInicio,
-                    fechaFin
+                    habitacionId
             );
 
             ResponseEntity<DisponibilidadResponse> response = restTemplate.getForEntity(
@@ -201,12 +200,14 @@ public class HotelInternalApi {
      * Obtiene el total de habitaciones sumando las de todos los hoteles.
      */
     public int getTotalHabitaciones() {
-        List<HotelInternalResponse> hoteles = getAllHoteles();
-        int total = 0;
-        for (HotelInternalResponse hotel : hoteles) {
-            total += getTotalHabitacionesPorHotel(hotel.getId());
+        try {
+            String url = hotelServiceUrl + "/api/v1/habitaciones";
+            ResponseEntity<Object[]> response = restTemplate.getForEntity(url, Object[].class);
+            return response.getBody() != null ? response.getBody().length : 0;
+        } catch (Exception e) {
+            LOGGER.error("Error fetching habitaciones count: {}", e.getMessage());
+            return 0;
         }
-        return total;
     }
 
     /**
