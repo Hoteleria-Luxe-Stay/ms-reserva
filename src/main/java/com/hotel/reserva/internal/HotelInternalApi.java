@@ -5,6 +5,9 @@ import com.hotel.reserva.internal.dto.HotelInternalResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
@@ -27,12 +30,14 @@ public class HotelInternalApi {
     private static final Logger LOGGER = LoggerFactory.getLogger(HotelInternalApi.class);
 
     private final RestTemplate restTemplate;
+    private final ServiceTokenProvider serviceTokenProvider;
 
     @Value("${internal.hotel-service.url}")
     private String hotelServiceUrl;
 
-    public HotelInternalApi(RestTemplate restTemplate) {
+    public HotelInternalApi(RestTemplate restTemplate, ServiceTokenProvider serviceTokenProvider) {
         this.restTemplate = restTemplate;
+        this.serviceTokenProvider = serviceTokenProvider;
     }
 
     /**
@@ -42,8 +47,10 @@ public class HotelInternalApi {
         try {
             String url = hotelServiceUrl + "/api/v1/hoteles/" + hotelId;
 
-            ResponseEntity<HotelInternalResponse> response = restTemplate.getForEntity(
+            ResponseEntity<HotelInternalResponse> response = restTemplate.exchange(
                     url,
+                    HttpMethod.GET,
+                    authEntity(),
                     HotelInternalResponse.class
             );
 
@@ -65,8 +72,10 @@ public class HotelInternalApi {
         try {
             String url = hotelServiceUrl + "/api/v1/habitaciones/" + habitacionId;
 
-            ResponseEntity<HabitacionInternalResponse> response = restTemplate.getForEntity(
+            ResponseEntity<HabitacionInternalResponse> response = restTemplate.exchange(
                     url,
+                    HttpMethod.GET,
+                    authEntity(),
                     HabitacionInternalResponse.class
             );
 
@@ -93,8 +102,10 @@ public class HotelInternalApi {
                     habitacionId
             );
 
-            ResponseEntity<DisponibilidadResponse> response = restTemplate.getForEntity(
+            ResponseEntity<DisponibilidadResponse> response = restTemplate.exchange(
                     url,
+                    HttpMethod.GET,
+                    authEntity(),
                     DisponibilidadResponse.class
             );
 
@@ -120,8 +131,10 @@ public class HotelInternalApi {
                     fechaFin
             );
 
-            ResponseEntity<HabitacionesDisponiblesWrapper> response = restTemplate.getForEntity(
+            ResponseEntity<HabitacionesDisponiblesWrapper> response = restTemplate.exchange(
                     url,
+                    HttpMethod.GET,
+                    authEntity(),
                     HabitacionesDisponiblesWrapper.class
             );
 
@@ -142,7 +155,11 @@ public class HotelInternalApi {
     public int getTotalDepartamentos() {
         try {
             String url = hotelServiceUrl + "/api/v1/departamentos";
-            ResponseEntity<Object[]> response = restTemplate.getForEntity(url, Object[].class);
+            ResponseEntity<Object[]> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.GET,
+                    authEntity(),
+                    Object[].class);
             return response.getBody() != null ? response.getBody().length : 0;
         } catch (Exception e) {
             LOGGER.error("Error fetching departamentos count: {}", e.getMessage());
@@ -156,7 +173,11 @@ public class HotelInternalApi {
     public int getTotalHoteles() {
         try {
             String url = hotelServiceUrl + "/api/v1/hoteles";
-            ResponseEntity<Object[]> response = restTemplate.getForEntity(url, Object[].class);
+            ResponseEntity<Object[]> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.GET,
+                    authEntity(),
+                    Object[].class);
             return response.getBody() != null ? response.getBody().length : 0;
         } catch (Exception e) {
             LOGGER.error("Error fetching hoteles count: {}", e.getMessage());
@@ -170,7 +191,11 @@ public class HotelInternalApi {
     public int getTotalHabitacionesPorHotel(Long hotelId) {
         try {
             String url = hotelServiceUrl + "/api/v1/hoteles/" + hotelId + "/habitaciones";
-            ResponseEntity<Object[]> response = restTemplate.getForEntity(url, Object[].class);
+            ResponseEntity<Object[]> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.GET,
+                    authEntity(),
+                    Object[].class);
             return response.getBody() != null ? response.getBody().length : 0;
         } catch (Exception e) {
             LOGGER.error("Error fetching habitaciones count for hotel {}: {}", hotelId, e.getMessage());
@@ -184,8 +209,11 @@ public class HotelInternalApi {
     public List<HotelInternalResponse> getAllHoteles() {
         try {
             String url = hotelServiceUrl + "/api/v1/hoteles";
-            ResponseEntity<HotelInternalResponse[]> response = restTemplate.getForEntity(
-                    url, HotelInternalResponse[].class);
+            ResponseEntity<HotelInternalResponse[]> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.GET,
+                    authEntity(),
+                    HotelInternalResponse[].class);
             if (response.getBody() != null) {
                 return List.of(response.getBody());
             }
@@ -202,7 +230,11 @@ public class HotelInternalApi {
     public int getTotalHabitaciones() {
         try {
             String url = hotelServiceUrl + "/api/v1/habitaciones";
-            ResponseEntity<Object[]> response = restTemplate.getForEntity(url, Object[].class);
+            ResponseEntity<Object[]> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.GET,
+                    authEntity(),
+                    Object[].class);
             return response.getBody() != null ? response.getBody().length : 0;
         } catch (Exception e) {
             LOGGER.error("Error fetching habitaciones count: {}", e.getMessage());
@@ -218,8 +250,11 @@ public class HotelInternalApi {
         try {
             // Obtener todos los departamentos
             String depUrl = hotelServiceUrl + "/api/v1/departamentos";
-            ResponseEntity<DepartamentoSimple[]> depResponse = restTemplate.getForEntity(
-                    depUrl, DepartamentoSimple[].class);
+            ResponseEntity<DepartamentoSimple[]> depResponse = restTemplate.exchange(
+                    depUrl,
+                    HttpMethod.GET,
+                    authEntity(),
+                    DepartamentoSimple[].class);
 
             Map<String, Long> resultado = new LinkedHashMap<>();
 
@@ -287,5 +322,11 @@ public class HotelInternalApi {
         public void setHabitaciones(List<HabitacionInternalResponse> habitaciones) {
             this.habitaciones = habitaciones;
         }
+    }
+
+    private HttpEntity<Void> authEntity() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(serviceTokenProvider.getToken());
+        return new HttpEntity<>(headers);
     }
 }
