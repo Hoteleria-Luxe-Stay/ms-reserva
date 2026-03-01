@@ -8,7 +8,7 @@ Microservicio de gestión de reservas, clientes y dashboard. Publica eventos a K
 |-----------|-------|
 | Puerto | 8083 |
 | Java | 21 |
-| Spring Boot | 3.5.7 |
+| Spring Boot | 3.4.0 |
 | Spring Cloud | 2024.0.1 |
 | Context Path | /api/v1 |
 | Base de Datos | MySQL |
@@ -18,34 +18,34 @@ Microservicio de gestión de reservas, clientes y dashboard. Publica eventos a K
 
 ```
 ms-reserva/
-└── reserva-service/
-    ├── pom.xml
-    ├── contracts/
-    │   └── reserva-service-api.yaml
-    └── src/main/
-        ├── java/com/hotel/reserva/
-        │   ├── ReservaServiceApplication.java
-        │   ├── api/
-        │   │   ├── ReservasController.java
-        │   │   ├── ClientesController.java
-        │   │   ├── MisReservasController.java
-        │   │   └── DashboardController.java
-        │   ├── core/
-        │   │   ├── cliente/ (model, repository, service)
-        │   │   ├── reserva/ (model, repository, service)
-        │   │   ├── detalle_reserva/ (model, repository)
-        │   │   └── dashboard/ (service)
-        │   ├── helpers/ (exceptions, mappers)
-        │   ├── infrastructure/
-        │   │   ├── config/ (RabbitConfig, CorsConfig)
-        │   │   ├── events/ (ReservaNotificationPublisher)
-        │   │   └── security/ (AuthContextFilter)
-        │   └── internal/
-        │       ├── HotelInternalApi.java
-        │       ├── AuthInternalApi.java
-        │       └── dto/
-        └── resources/
-            └── application.yml
+├── pom.xml
+├── Dockerfile
+├── contracts/
+│   └── reserva-service-api.yaml
+└── src/main/
+    ├── java/com/hotel/reserva/
+    │   ├── ReservaServiceApplication.java
+    │   ├── api/
+    │   │   ├── ReservasController.java
+    │   │   ├── ClientesController.java
+    │   │   ├── MisReservasController.java
+    │   │   └── DashboardController.java
+    │   ├── core/
+    │   │   ├── cliente/ (model, repository, service)
+    │   │   ├── reserva/ (model, repository, service)
+    │   │   ├── detalle_reserva/ (model, repository)
+    │   │   └── dashboard/ (service)
+    │   ├── helpers/ (exceptions, mappers)
+    │   ├── infrastructure/
+    │   │   ├── config/ (RabbitConfig, CorsConfig)
+    │   │   ├── events/ (ReservaNotificationPublisher)
+    │   │   └── security/ (AuthContextFilter)
+    │   └── internal/
+    │       ├── HotelInternalApi.java
+    │       ├── AuthInternalApi.java
+    │       └── dto/
+    └── resources/
+        └── application.yml
 ```
 
 ## Endpoints
@@ -109,37 +109,23 @@ ms-reserva/
 ### Dockerfile
 
 ```dockerfile
-FROM eclipse-temurin:21-jdk-alpine AS builder
-
+FROM maven:3.9-eclipse-temurin-21-alpine AS builder
 WORKDIR /app
-
 COPY pom.xml .
-COPY .mvn .mvn
-COPY mvnw .
-
-RUN chmod +x mvnw && ./mvnw dependency:go-offline -B
-
+RUN mvn dependency:go-offline -B
 COPY src ./src
 COPY contracts ./contracts
-
-RUN ./mvnw clean package -DskipTests
+RUN mvn clean package -DskipTests -B
 
 FROM eclipse-temurin:21-jre-alpine
-
 WORKDIR /app
-
 RUN addgroup -S spring && adduser -S spring -G spring
+COPY --from=builder /app/target/*.jar app.jar
 USER spring:spring
-
-COPY --from=builder /app/target/reserva-service-*.jar app.jar
-
 EXPOSE 8083
-
 ENV JAVA_OPTS="-Xms256m -Xmx512m"
-
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8083/api/v1/actuator/health || exit 1
-
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8083/api/v1/actuator/health || exit 1
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
 ```
 
@@ -151,7 +137,7 @@ version: '3.8'
 services:
   reserva-service:
     build:
-      context: ./reserva-service
+      context: .
       dockerfile: Dockerfile
     container_name: reserva-service
     ports:
@@ -172,6 +158,7 @@ services:
       - AUTH_SERVICE_URL=http://auth-service:8081
       - HOTEL_SERVICE_URL=http://hotel-service:8082
       - CORS_ALLOWED_ORIGINS=http://localhost:4200
+      - JAVA_OPTS=-Xms256m -Xmx512m
     depends_on:
       mysql:
         condition: service_healthy
@@ -198,11 +185,10 @@ networks:
 
 ```bash
 # Compilar
-cd reserva-service
-./mvnw clean package -DskipTests
+mvn clean package -DskipTests
 
 # Construir imagen
-docker build -t reserva-service:latest ./reserva-service
+docker build -t reserva-service:latest .
 
 # Ejecutar
 docker run -d \
@@ -372,7 +358,7 @@ az acr build \
   --registry $ACR_NAME \
   --image reserva-service:v1.0.0 \
   --image reserva-service:latest \
-  ./reserva-service
+  .
 ```
 
 ### 2. Deployment en AKS
@@ -447,7 +433,7 @@ variables:
   dockerRegistryServiceConnection: 'acr-connection'
   imageRepository: 'reserva-service'
   containerRegistry: 'acrhotelreservas.azurecr.io'
-  dockerfilePath: 'ms-reserva/reserva-service/Dockerfile'
+  dockerfilePath: 'ms-reserva/Dockerfile'
   tag: '$(Build.BuildId)'
 
 pool:
@@ -461,7 +447,7 @@ stages:
           - task: Maven@3
             displayName: 'Maven Package'
             inputs:
-              mavenPomFile: 'ms-reserva/reserva-service/pom.xml'
+              mavenPomFile: 'ms-reserva/pom.xml'
               goals: 'clean package'
               options: '-DskipTests'
               javaHomeOption: 'JDKVersion'
@@ -665,10 +651,8 @@ curl http://localhost:8083/api/v1/reservas/1
 ## Ejecución Local
 
 ```bash
-cd reserva-service
-
 # Compilar
-./mvnw clean package -DskipTests
+mvn clean package -DskipTests
 
 # Ejecutar
 java -jar target/reserva-service-1.0.0-SNAPSHOT.jar \
