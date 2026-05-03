@@ -1,15 +1,18 @@
 package com.hotel.reserva.api;
 
+import com.hotel.reserva.api.dto.IniciarPagoResponse;
 import com.hotel.reserva.api.dto.MessageResponse;
 import com.hotel.reserva.api.dto.ReservaAdminUpdateRequest;
 import com.hotel.reserva.api.dto.ReservaCreatedResponse;
 import com.hotel.reserva.api.dto.ReservaListResponse;
 import com.hotel.reserva.api.dto.ReservaRequest;
 import com.hotel.reserva.api.dto.ReservaResponse;
+import com.hotel.reserva.core.reserva.model.EstadoReserva;
 import com.hotel.reserva.core.reserva.model.Reserva;
 import com.hotel.reserva.core.reserva.service.ReservaService;
 import com.hotel.reserva.helpers.mappers.ReservaMapper;
 import com.hotel.reserva.internal.dto.AuthTokenValidationResponse;
+import com.hotel.reserva.internal.dto.CrearPagoInternalResponse;
 import com.hotel.reserva.infrastructure.security.AuthUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -73,7 +76,30 @@ public class ReservasController implements ReservasApi {
     }
 
     @Override
-    public ResponseEntity<ReservaResponse> confirmarPago(Long id) {
+    public ResponseEntity<IniciarPagoResponse> iniciarPago(Long id, String idempotencyKey) {
+        AuthTokenValidationResponse auth = AuthUtils.getAuth(getRequest());
+        if (auth == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        Reserva reserva = reservaService.buscarPorId(id);
+        if (!AuthUtils.isAdmin(auth) && !esReservaDelUsuario(reserva, auth.getUserId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        CrearPagoInternalResponse pago = reservaService.iniciarPago(id);
+
+        IniciarPagoResponse response = new IniciarPagoResponse();
+        response.setReservaId(id);
+        response.setPagoId(pago.getPagoId());
+        response.setCheckoutUrl(pago.getCheckoutUrl());
+        response.setGatewayPaymentId(pago.getGatewayPaymentId());
+        response.setEstado(EstadoReserva.PAGO_EN_PROCESO.name());
+        return ResponseEntity.ok(response);
+    }
+
+    @Override
+    public ResponseEntity<ReservaResponse> confirmar(Long id) {
         AuthTokenValidationResponse auth = AuthUtils.getAuth(getRequest());
         if (auth == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
@@ -85,7 +111,7 @@ public class ReservasController implements ReservasApi {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 
-        reserva = reservaService.confirmarPago(id);
+        reserva = reservaService.confirmar(id);
         return ResponseEntity.ok(ReservaMapper.toResponse(reserva));
     }
 

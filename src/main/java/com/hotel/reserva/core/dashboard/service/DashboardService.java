@@ -3,6 +3,7 @@ package com.hotel.reserva.core.dashboard.service;
 import com.hotel.reserva.api.dto.DashboardReservaReciente;
 import com.hotel.reserva.api.dto.DashboardStatsResponse;
 import com.hotel.reserva.api.dto.DashboardTopHotel;
+import com.hotel.reserva.core.reserva.model.EstadoReserva;
 import com.hotel.reserva.core.reserva.model.Reserva;
 import com.hotel.reserva.core.reserva.repository.ReservaRepository;
 import com.hotel.reserva.internal.HotelInternalApi;
@@ -19,10 +20,6 @@ import java.util.stream.Collectors;
 
 @Service
 public class DashboardService {
-
-    private static final String ESTADO_CONFIRMADA = "CONFIRMADA";
-    private static final String ESTADO_CANCELADA = "CANCELADA";
-    private static final String ESTADO_PENDIENTE = "PENDIENTE";
 
     private final ReservaRepository reservaRepository;
     private final HotelInternalApi hotelInternalApi;
@@ -54,21 +51,18 @@ public class DashboardService {
 
     private Map<String, Long> calcularReservasPorEstado(List<Reserva> reservas) {
         Map<String, Long> resultado = new HashMap<>();
-        resultado.put(ESTADO_CONFIRMADA, reservas.stream()
-                .filter(r -> ESTADO_CONFIRMADA.equals(r.getEstado()))
-                .count());
-        resultado.put(ESTADO_CANCELADA, reservas.stream()
-                .filter(r -> ESTADO_CANCELADA.equals(r.getEstado()))
-                .count());
-        resultado.put(ESTADO_PENDIENTE, reservas.stream()
-                .filter(r -> ESTADO_PENDIENTE.equals(r.getEstado()))
-                .count());
+        for (EstadoReserva estado : EstadoReserva.values()) {
+            long count = reservas.stream()
+                    .filter(r -> r.getEstado() == estado)
+                    .count();
+            resultado.put(estado.name(), count);
+        }
         return resultado;
     }
 
     private double calcularIngresosTotales(List<Reserva> reservas) {
         return reservas.stream()
-                .filter(r -> ESTADO_CONFIRMADA.equals(r.getEstado()))
+                .filter(r -> r.getEstado() == EstadoReserva.CONFIRMADA)
                 .mapToDouble(Reserva::getTotal)
                 .sum();
     }
@@ -101,7 +95,7 @@ public class DashboardService {
             String nombreMes = mes.getMonth().toString().substring(0, 3) + " " + mes.getYear();
 
             double total = reservas.stream()
-                    .filter(r -> ESTADO_CONFIRMADA.equals(r.getEstado()))
+                    .filter(r -> r.getEstado() == EstadoReserva.CONFIRMADA)
                     .filter(r -> r.getFechaReserva() != null)
                     .filter(r -> YearMonth.from(r.getFechaReserva()).equals(mes))
                     .mapToDouble(Reserva::getTotal)
@@ -148,7 +142,7 @@ public class DashboardService {
                     reciente.setFechaInicio(reserva.getFechaInicio());
                     reciente.setFechaFin(reserva.getFechaFin());
                     reciente.setTotal(reserva.getTotal());
-                    reciente.setEstado(reserva.getEstado());
+                    reciente.setEstado(reserva.getEstado() != null ? reserva.getEstado().name() : null);
                     return reciente;
                 })
                 .toList();

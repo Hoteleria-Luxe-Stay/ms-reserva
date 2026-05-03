@@ -75,22 +75,59 @@ paths:
         '404':
           description: No encontrada
 
-  /reservas/{id}/confirmar-pago:
+  /reservas/{id}/iniciar-pago:
     post:
       tags: [reservas]
-      summary: Confirmar pago de reserva
-      operationId: confirmarPago
+      summary: Iniciar pago de la reserva (SAGA — crea Stripe Checkout Session)
+      description: |
+        Transiciona la reserva de PENDIENTE_PAGO a PAGO_EN_PROCESO y crea una
+        Stripe Checkout Session via ms-pago. Devuelve el checkoutUrl al que el
+        frontend debe redirigir al usuario.
+
+        Requiere header `Idempotency-Key: <UUID v4>` (validado en api-gateway).
+      operationId: iniciarPago
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Checkout creado, redirigir al checkoutUrl
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IniciarPagoResponse'
+        '400':
+          description: Transicion de estado invalida o reserva no esta en PENDIENTE_PAGO
+        '404':
+          description: Reserva no encontrada
+        '502':
+          description: ms-pago / Stripe no disponible
+        '503':
+          description: ms-pago caido (circuit breaker abierto)
+
+  /reservas/{id}/confirmar:
+    post:
+      tags: [reservas]
+      summary: Confirmar reserva (cambio de estado, no procesa pago real)
+      operationId: confirmar
       parameters:
         - $ref: '#/components/parameters/IdPath'
       responses:
         '200':
-          description: Pago confirmado
+          description: Reserva confirmada
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ReservaResponse'
         '400':
-          description: Estado invalido para confirmar
+          description: Transicion de estado invalida
 
   /reservas/{id}/cancelar:
     post:
@@ -130,7 +167,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [PENDIENTE, CONFIRMADA, CANCELADA]
+            enum: [PENDIENTE_PAGO, PAGO_EN_PROCESO, CONFIRMADA, PAGO_FALLIDO, EXPIRADA, CANCELADA]
       responses:
         '200':
           description: Lista de mis reservas
@@ -202,7 +239,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [PENDIENTE, CONFIRMADA, CANCELADA]
+            enum: [PENDIENTE_PAGO, PAGO_EN_PROCESO, CONFIRMADA, PAGO_FALLIDO, EXPIRADA, CANCELADA]
       responses:
         '200':
           description: Lista de reservas
@@ -441,7 +478,7 @@ components:
           format: date
         estado:
           type: string
-          enum: [PENDIENTE, CONFIRMADA, CANCELADA]
+          enum: [PENDIENTE_PAGO, PAGO_EN_PROCESO, CONFIRMADA, PAGO_FALLIDO, EXPIRADA, CANCELADA]
         hotelId:
           type: integer
           format: int64
@@ -643,6 +680,23 @@ components:
         precioNoche:
           type: number
           format: double
+
+    IniciarPagoResponse:
+      type: object
+      properties:
+        reservaId:
+          type: integer
+          format: int64
+        pagoId:
+          type: integer
+          format: int64
+        checkoutUrl:
+          type: string
+        gatewayPaymentId:
+          type: string
+        estado:
+          type: string
+          description: Estado de la reserva luego de la transicion (PAGO_EN_PROCESO)
 
     MessageResponse:
       type: object

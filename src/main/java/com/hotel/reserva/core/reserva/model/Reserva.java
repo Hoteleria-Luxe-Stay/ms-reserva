@@ -3,15 +3,20 @@ package com.hotel.reserva.core.reserva.model;
 import com.hotel.reserva.core.cliente.model.Cliente;
 import com.hotel.reserva.core.detalle_reserva.model.DetalleReserva;
 import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.Version;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -27,7 +32,11 @@ public class Reserva {
     private LocalDate fechaFin;
     private LocalDate fechaCancelacion;
     private double total;
-    private String estado;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32, nullable = false)
+    private EstadoReserva estado;
+
     private String motivoCancelacion;
 
     private Long hotelId;
@@ -35,6 +44,12 @@ public class Reserva {
     private String hotelDireccion;
     private Long departamentoId;
     private String departamentoNombre;
+
+    @Column(name = "expires_at")
+    private LocalDateTime expiresAt;
+
+    @Version
+    private Long version;
 
     @ManyToOne
     @JoinColumn(name = "cliente_id")
@@ -46,6 +61,22 @@ public class Reserva {
     public void addDetalle(DetalleReserva detalle) {
         detalle.setReserva(this);
         this.detalles.add(detalle);
+    }
+
+    /**
+     * Aplica una transicion de estado validando contra la state machine.
+     * Lanza IllegalStateException si la transicion no es permitida.
+     */
+    public void transicionarA(EstadoReserva nuevo) {
+        if (estado == null) {
+            throw new IllegalStateException("Reserva sin estado, no puede transicionar.");
+        }
+        if (!estado.puedeTransicionarA(nuevo)) {
+            throw new IllegalStateException(
+                    "Transicion invalida: " + estado + " -> " + nuevo
+            );
+        }
+        this.estado = nuevo;
     }
 
     public Long getId() {
@@ -96,11 +127,11 @@ public class Reserva {
         this.total = total;
     }
 
-    public String getEstado() {
+    public EstadoReserva getEstado() {
         return estado;
     }
 
-    public void setEstado(String estado) {
+    public void setEstado(EstadoReserva estado) {
         this.estado = estado;
     }
 
@@ -150,6 +181,22 @@ public class Reserva {
 
     public void setDepartamentoNombre(String departamentoNombre) {
         this.departamentoNombre = departamentoNombre;
+    }
+
+    public LocalDateTime getExpiresAt() {
+        return expiresAt;
+    }
+
+    public void setExpiresAt(LocalDateTime expiresAt) {
+        this.expiresAt = expiresAt;
+    }
+
+    public Long getVersion() {
+        return version;
+    }
+
+    public void setVersion(Long version) {
+        this.version = version;
     }
 
     public Cliente getCliente() {

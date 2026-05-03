@@ -1,7 +1,10 @@
 package com.hotel.reserva.internal;
 
+import com.hotel.reserva.helpers.exceptions.ServiceUnavailableException;
 import com.hotel.reserva.internal.dto.HabitacionInternalResponse;
 import com.hotel.reserva.internal.dto.HotelInternalResponse;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,8 +13,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestTemplate;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDate;
 import java.util.Collections;
@@ -22,12 +25,21 @@ import java.util.Optional;
 
 /**
  * Cliente interno para comunicarse con hotel-service.
- * Usar esta clase cuando necesites consultar hoteles o habitaciones.
+ * Protegido por Circuit Breaker + Retry (Resilience4j).
+ *
+ * Estrategia de fallback:
+ *  - Métodos críticos del flujo de reserva (getHotelById, getHabitacionById,
+ *    checkDisponibilidad, getHabitacionesDisponibles) → lanzan ServiceUnavailableException
+ *    para que el cliente reciba 503 explícito.
+ *  - Métodos de dashboard (getTotal*, getAllHoteles, getHotelesPorDepartamentoReal) →
+ *    devuelven valores por defecto (0, lista vacía, mapa vacío) para degradar graciosamente.
+ *  - 404 (entidad no existe) sigue siendo Optional.empty() — no es falla del servicio.
  */
 @Component
 public class HotelInternalApi {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(HotelInternalApi.class);
+    private static final String CB_NAME = "hotelService";
 
     private final RestTemplate restTemplate;
     private final ServiceTokenProvider serviceTokenProvider;
@@ -40,247 +52,226 @@ public class HotelInternalApi {
         this.serviceTokenProvider = serviceTokenProvider;
     }
 
-    /**
-     * Obtiene un hotel por su ID.
-     */
+    @CircuitBreaker(name = CB_NAME, fallbackMethod = "fallbackGetHotelById")
+    @Retry(name = CB_NAME)
     public Optional<HotelInternalResponse> getHotelById(Long hotelId) {
         try {
             String url = hotelServiceUrl + "/api/v1/hoteles/" + hotelId;
-
             ResponseEntity<HotelInternalResponse> response = restTemplate.exchange(
-                    url,
-                    HttpMethod.GET,
-                    authEntity(),
-                    HotelInternalResponse.class
+                    url, HttpMethod.GET, authEntity(), HotelInternalResponse.class
             );
-
             return Optional.ofNullable(response.getBody());
-
         } catch (HttpClientErrorException.NotFound e) {
             LOGGER.warn("Hotel not found: {}", hotelId);
             return Optional.empty();
-        } catch (Exception e) {
-            LOGGER.error("Error fetching hotel from hotel-service: {}", e.getMessage());
-            return Optional.empty();
         }
     }
 
-    /**
-     * Obtiene una habitacion por su ID.
-     */
+    @SuppressWarnings("unused")
+    private Optional<HotelInternalResponse> fallbackGetHotelById(Long hotelId, Throwable t) {
+        LOGGER.error("hotel-service unavailable getting hotel {}: {}", hotelId, t.getMessage());
+        throw new ServiceUnavailableException("hotel-service", t);
+    }
+
+    @CircuitBreaker(name = CB_NAME, fallbackMethod = "fallbackGetHabitacionById")
+    @Retry(name = CB_NAME)
     public Optional<HabitacionInternalResponse> getHabitacionById(Long habitacionId) {
         try {
             String url = hotelServiceUrl + "/api/v1/habitaciones/" + habitacionId;
-
             ResponseEntity<HabitacionInternalResponse> response = restTemplate.exchange(
-                    url,
-                    HttpMethod.GET,
-                    authEntity(),
-                    HabitacionInternalResponse.class
+                    url, HttpMethod.GET, authEntity(), HabitacionInternalResponse.class
             );
-
             return Optional.ofNullable(response.getBody());
-
         } catch (HttpClientErrorException.NotFound e) {
             LOGGER.warn("Habitacion not found: {}", habitacionId);
             return Optional.empty();
-        } catch (Exception e) {
-            LOGGER.error("Error fetching habitacion from hotel-service: {}", e.getMessage());
-            return Optional.empty();
         }
     }
 
-    /**
-     * Verifica si la habitación está físicamente disponible (estado = DISPONIBLE).
-     * La verificación de solapamiento de fechas se hace localmente en ReservaService.
-     */
+    @SuppressWarnings("unused")
+    private Optional<HabitacionInternalResponse> fallbackGetHabitacionById(Long habitacionId, Throwable t) {
+        LOGGER.error("hotel-service unavailable getting habitacion {}: {}", habitacionId, t.getMessage());
+        throw new ServiceUnavailableException("hotel-service", t);
+    }
+
+    @CircuitBreaker(name = CB_NAME, fallbackMethod = "fallbackCheckDisponibilidad")
+    @Retry(name = CB_NAME)
     public boolean checkDisponibilidad(Long habitacionId) {
-        try {
-            String url = String.format(
-                    "%s/api/v1/habitaciones/%d/disponibilidad",
-                    hotelServiceUrl,
-                    habitacionId
-            );
-
-            ResponseEntity<DisponibilidadResponse> response = restTemplate.exchange(
-                    url,
-                    HttpMethod.GET,
-                    authEntity(),
-                    DisponibilidadResponse.class
-            );
-
-            return response.getBody() != null && Boolean.TRUE.equals(response.getBody().getDisponible());
-
-        } catch (Exception e) {
-            LOGGER.error("Error checking disponibilidad: {}", e.getMessage());
-            return false;
-        }
+        String url = String.format(
+                "%s/api/v1/habitaciones/%d/disponibilidad",
+                hotelServiceUrl,
+                habitacionId
+        );
+        ResponseEntity<DisponibilidadResponse> response = restTemplate.exchange(
+                url, HttpMethod.GET, authEntity(), DisponibilidadResponse.class
+        );
+        return response.getBody() != null && Boolean.TRUE.equals(response.getBody().getDisponible());
     }
 
-    /**
-     * Obtiene habitaciones disponibles para un hotel en un rango de fechas.
-     */
+    @SuppressWarnings("unused")
+    private boolean fallbackCheckDisponibilidad(Long habitacionId, Throwable t) {
+        LOGGER.error("hotel-service unavailable checking disponibilidad for habitacion {}: {}", habitacionId, t.getMessage());
+        throw new ServiceUnavailableException("hotel-service", t);
+    }
+
+    @CircuitBreaker(name = CB_NAME, fallbackMethod = "fallbackGetHabitacionesDisponibles")
+    @Retry(name = CB_NAME)
     public List<HabitacionInternalResponse> getHabitacionesDisponibles(
             Long hotelId, LocalDate fechaInicio, LocalDate fechaFin) {
-        try {
-            String url = String.format(
-                    "%s/api/v1/habitaciones?hotelId=%d&fechaInicio=%s&fechaFin=%s",
-                    hotelServiceUrl,
-                    hotelId,
-                    fechaInicio,
-                    fechaFin
-            );
-
-            ResponseEntity<HabitacionesDisponiblesWrapper> response = restTemplate.exchange(
-                    url,
-                    HttpMethod.GET,
-                    authEntity(),
-                    HabitacionesDisponiblesWrapper.class
-            );
-
-            if (response.getBody() != null) {
-                return response.getBody().getHabitaciones();
-            }
-            return Collections.emptyList();
-
-        } catch (Exception e) {
-            LOGGER.error("Error fetching habitaciones disponibles: {}", e.getMessage());
-            return Collections.emptyList();
+        String url = String.format(
+                "%s/api/v1/habitaciones?hotelId=%d&fechaInicio=%s&fechaFin=%s",
+                hotelServiceUrl,
+                hotelId,
+                fechaInicio,
+                fechaFin
+        );
+        ResponseEntity<HabitacionesDisponiblesWrapper> response = restTemplate.exchange(
+                url, HttpMethod.GET, authEntity(), HabitacionesDisponiblesWrapper.class
+        );
+        if (response.getBody() != null) {
+            return response.getBody().getHabitaciones();
         }
+        return Collections.emptyList();
     }
 
-    /**
-     * Obtiene el total de departamentos desde hotel-service.
-     */
+    @SuppressWarnings("unused")
+    private List<HabitacionInternalResponse> fallbackGetHabitacionesDisponibles(
+            Long hotelId, LocalDate fechaInicio, LocalDate fechaFin, Throwable t) {
+        LOGGER.error("hotel-service unavailable getting habitaciones disponibles for hotel {}: {}", hotelId, t.getMessage());
+        throw new ServiceUnavailableException("hotel-service", t);
+    }
+
+    // ======================================================================
+    // Dashboard methods — degradación graciosa (default values en fallback)
+    // ======================================================================
+
+    @CircuitBreaker(name = CB_NAME, fallbackMethod = "fallbackGetTotalDepartamentos")
+    @Retry(name = CB_NAME)
     public int getTotalDepartamentos() {
-        try {
-            String url = hotelServiceUrl + "/api/v1/departamentos";
-            ResponseEntity<Object[]> response = restTemplate.exchange(
-                    url,
-                    HttpMethod.GET,
-                    authEntity(),
-                    Object[].class);
-            return response.getBody() != null ? response.getBody().length : 0;
-        } catch (Exception e) {
-            LOGGER.error("Error fetching departamentos count: {}", e.getMessage());
-            return 0;
-        }
+        String url = hotelServiceUrl + "/api/v1/departamentos";
+        ResponseEntity<Object[]> response = restTemplate.exchange(
+                url, HttpMethod.GET, authEntity(), Object[].class
+        );
+        return response.getBody() != null ? response.getBody().length : 0;
     }
 
-    /**
-     * Obtiene el total de hoteles desde hotel-service.
-     */
+    @SuppressWarnings("unused")
+    private int fallbackGetTotalDepartamentos(Throwable t) {
+        LOGGER.warn("hotel-service unavailable, returning 0 for total departamentos: {}", t.getMessage());
+        return 0;
+    }
+
+    @CircuitBreaker(name = CB_NAME, fallbackMethod = "fallbackGetTotalHoteles")
+    @Retry(name = CB_NAME)
     public int getTotalHoteles() {
-        try {
-            String url = hotelServiceUrl + "/api/v1/hoteles";
-            ResponseEntity<Object[]> response = restTemplate.exchange(
-                    url,
-                    HttpMethod.GET,
-                    authEntity(),
-                    Object[].class);
-            return response.getBody() != null ? response.getBody().length : 0;
-        } catch (Exception e) {
-            LOGGER.error("Error fetching hoteles count: {}", e.getMessage());
-            return 0;
-        }
+        String url = hotelServiceUrl + "/api/v1/hoteles";
+        ResponseEntity<Object[]> response = restTemplate.exchange(
+                url, HttpMethod.GET, authEntity(), Object[].class
+        );
+        return response.getBody() != null ? response.getBody().length : 0;
     }
 
-    /**
-     * Obtiene el total de habitaciones de un hotel desde hotel-service.
-     */
+    @SuppressWarnings("unused")
+    private int fallbackGetTotalHoteles(Throwable t) {
+        LOGGER.warn("hotel-service unavailable, returning 0 for total hoteles: {}", t.getMessage());
+        return 0;
+    }
+
+    @CircuitBreaker(name = CB_NAME, fallbackMethod = "fallbackGetTotalHabitacionesPorHotel")
+    @Retry(name = CB_NAME)
     public int getTotalHabitacionesPorHotel(Long hotelId) {
-        try {
-            String url = hotelServiceUrl + "/api/v1/hoteles/" + hotelId + "/habitaciones";
-            ResponseEntity<Object[]> response = restTemplate.exchange(
-                    url,
-                    HttpMethod.GET,
-                    authEntity(),
-                    Object[].class);
-            return response.getBody() != null ? response.getBody().length : 0;
-        } catch (Exception e) {
-            LOGGER.error("Error fetching habitaciones count for hotel {}: {}", hotelId, e.getMessage());
-            return 0;
-        }
+        String url = hotelServiceUrl + "/api/v1/hoteles/" + hotelId + "/habitaciones";
+        ResponseEntity<Object[]> response = restTemplate.exchange(
+                url, HttpMethod.GET, authEntity(), Object[].class
+        );
+        return response.getBody() != null ? response.getBody().length : 0;
     }
 
-    /**
-     * Obtiene todos los hoteles como lista para calcular totales de habitaciones.
-     */
+    @SuppressWarnings("unused")
+    private int fallbackGetTotalHabitacionesPorHotel(Long hotelId, Throwable t) {
+        LOGGER.warn("hotel-service unavailable, returning 0 for habitaciones del hotel {}: {}", hotelId, t.getMessage());
+        return 0;
+    }
+
+    @CircuitBreaker(name = CB_NAME, fallbackMethod = "fallbackGetAllHoteles")
+    @Retry(name = CB_NAME)
     public List<HotelInternalResponse> getAllHoteles() {
-        try {
-            String url = hotelServiceUrl + "/api/v1/hoteles";
-            ResponseEntity<HotelInternalResponse[]> response = restTemplate.exchange(
-                    url,
-                    HttpMethod.GET,
-                    authEntity(),
-                    HotelInternalResponse[].class);
-            if (response.getBody() != null) {
-                return List.of(response.getBody());
-            }
-            return Collections.emptyList();
-        } catch (Exception e) {
-            LOGGER.error("Error fetching all hoteles: {}", e.getMessage());
-            return Collections.emptyList();
+        String url = hotelServiceUrl + "/api/v1/hoteles";
+        ResponseEntity<HotelInternalResponse[]> response = restTemplate.exchange(
+                url, HttpMethod.GET, authEntity(), HotelInternalResponse[].class
+        );
+        if (response.getBody() != null) {
+            return List.of(response.getBody());
         }
+        return Collections.emptyList();
     }
 
-    /**
-     * Obtiene el total de habitaciones sumando las de todos los hoteles.
-     */
+    @SuppressWarnings("unused")
+    private List<HotelInternalResponse> fallbackGetAllHoteles(Throwable t) {
+        LOGGER.warn("hotel-service unavailable, returning empty list for all hoteles: {}", t.getMessage());
+        return Collections.emptyList();
+    }
+
+    @CircuitBreaker(name = CB_NAME, fallbackMethod = "fallbackGetTotalHabitaciones")
+    @Retry(name = CB_NAME)
     public int getTotalHabitaciones() {
-        try {
-            String url = hotelServiceUrl + "/api/v1/habitaciones";
-            ResponseEntity<Object[]> response = restTemplate.exchange(
-                    url,
-                    HttpMethod.GET,
-                    authEntity(),
-                    Object[].class);
-            return response.getBody() != null ? response.getBody().length : 0;
-        } catch (Exception e) {
-            LOGGER.error("Error fetching habitaciones count: {}", e.getMessage());
-            return 0;
-        }
+        String url = hotelServiceUrl + "/api/v1/habitaciones";
+        ResponseEntity<Object[]> response = restTemplate.exchange(
+                url, HttpMethod.GET, authEntity(), Object[].class
+        );
+        return response.getBody() != null ? response.getBody().length : 0;
     }
 
-    /**
-     * Obtiene todos los departamentos con la cantidad real de hoteles que tiene cada uno.
-     * Incluye departamentos sin hoteles (con valor 0).
-     */
+    @SuppressWarnings("unused")
+    private int fallbackGetTotalHabitaciones(Throwable t) {
+        LOGGER.warn("hotel-service unavailable, returning 0 for total habitaciones: {}", t.getMessage());
+        return 0;
+    }
+
+    @CircuitBreaker(name = CB_NAME, fallbackMethod = "fallbackGetHotelesPorDepartamentoReal")
+    @Retry(name = CB_NAME)
     public Map<String, Long> getHotelesPorDepartamentoReal() {
-        try {
-            // Obtener todos los departamentos
-            String depUrl = hotelServiceUrl + "/api/v1/departamentos";
-            ResponseEntity<DepartamentoSimple[]> depResponse = restTemplate.exchange(
-                    depUrl,
-                    HttpMethod.GET,
-                    authEntity(),
-                    DepartamentoSimple[].class);
+        String depUrl = hotelServiceUrl + "/api/v1/departamentos";
+        ResponseEntity<DepartamentoSimple[]> depResponse = restTemplate.exchange(
+                depUrl, HttpMethod.GET, authEntity(), DepartamentoSimple[].class
+        );
 
-            Map<String, Long> resultado = new LinkedHashMap<>();
+        Map<String, Long> resultado = new LinkedHashMap<>();
 
-            if (depResponse.getBody() != null) {
-                for (DepartamentoSimple dep : depResponse.getBody()) {
-                    resultado.put(dep.getNombre(), 0L);
-                }
+        if (depResponse.getBody() != null) {
+            for (DepartamentoSimple dep : depResponse.getBody()) {
+                resultado.put(dep.getNombre(), 0L);
             }
-
-            // Obtener todos los hoteles y agrupar por departamento
-            List<HotelInternalResponse> hoteles = getAllHoteles();
-            for (HotelInternalResponse hotel : hoteles) {
-                if (hotel.getDepartamento() != null && hotel.getDepartamento().getNombre() != null) {
-                    String depNombre = hotel.getDepartamento().getNombre();
-                    resultado.merge(depNombre, 1L, Long::sum);
-                }
-            }
-
-            return resultado;
-        } catch (Exception e) {
-            LOGGER.error("Error fetching hoteles por departamento: {}", e.getMessage());
-            return Collections.emptyMap();
         }
+
+        List<HotelInternalResponse> hoteles = getAllHoteles();
+        for (HotelInternalResponse hotel : hoteles) {
+            if (hotel.getDepartamento() != null && hotel.getDepartamento().getNombre() != null) {
+                String depNombre = hotel.getDepartamento().getNombre();
+                resultado.merge(depNombre, 1L, Long::sum);
+            }
+        }
+
+        return resultado;
     }
 
-    // DTOs internos para respuestas especificas
+    @SuppressWarnings("unused")
+    private Map<String, Long> fallbackGetHotelesPorDepartamentoReal(Throwable t) {
+        LOGGER.warn("hotel-service unavailable, returning empty map for hoteles por departamento: {}", t.getMessage());
+        return Collections.emptyMap();
+    }
+
+    // ======================================================================
+    // Helpers
+    // ======================================================================
+
+    private HttpEntity<Void> authEntity() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(serviceTokenProvider.getToken());
+        return new HttpEntity<>(headers);
+    }
+
+    // DTOs internos
     private static class DepartamentoSimple {
         private Long id;
         private String nombre;
@@ -295,38 +286,16 @@ public class HotelInternalApi {
         private Long habitacionId;
         private Boolean disponible;
 
-        public Long getHabitacionId() {
-            return habitacionId;
-        }
-
-        public void setHabitacionId(Long habitacionId) {
-            this.habitacionId = habitacionId;
-        }
-
-        public Boolean getDisponible() {
-            return disponible;
-        }
-
-        public void setDisponible(Boolean disponible) {
-            this.disponible = disponible;
-        }
+        public Long getHabitacionId() { return habitacionId; }
+        public void setHabitacionId(Long habitacionId) { this.habitacionId = habitacionId; }
+        public Boolean getDisponible() { return disponible; }
+        public void setDisponible(Boolean disponible) { this.disponible = disponible; }
     }
 
     private static class HabitacionesDisponiblesWrapper {
         private List<HabitacionInternalResponse> habitaciones;
 
-        public List<HabitacionInternalResponse> getHabitaciones() {
-            return habitaciones;
-        }
-
-        public void setHabitaciones(List<HabitacionInternalResponse> habitaciones) {
-            this.habitaciones = habitaciones;
-        }
-    }
-
-    private HttpEntity<Void> authEntity() {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(serviceTokenProvider.getToken());
-        return new HttpEntity<>(headers);
+        public List<HabitacionInternalResponse> getHabitaciones() { return habitaciones; }
+        public void setHabitaciones(List<HabitacionInternalResponse> habitaciones) { this.habitaciones = habitaciones; }
     }
 }

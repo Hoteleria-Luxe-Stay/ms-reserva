@@ -6,6 +6,12 @@ out/
 # Maven
 target/
 
+#Eclipse
+.classpath
+.project
+.settings/
+.factorypath
+
 # Logs
 *.log
 

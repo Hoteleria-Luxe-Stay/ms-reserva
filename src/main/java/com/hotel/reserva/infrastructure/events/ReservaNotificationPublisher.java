@@ -1,32 +1,48 @@
 package com.hotel.reserva.infrastructure.events;
 
+import com.hotel.reserva.core.outbox.service.OutboxPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
+/**
+ * Publisher de eventos de notificacion (consumidos por ms-notificacion).
+ *
+ * Round 6: en lugar de publicar directo a Kafka (dual-write problem), persiste
+ * el evento en la tabla outbox dentro de la transaccion del caller. El job
+ * {@code OutboxRelayJob} lo publica a Kafka asincronicamente con garantia
+ * at-least-once.
+ *
+ * IMPORTANTE: el caller (ReservaService, ReservaSagaHandler) DEBE estar dentro
+ * de una @Transactional. {@link OutboxPublisher} usa {@code Propagation.MANDATORY}
+ * — falla si no hay tx activa, evitando inconsistencias por accidente.
+ */
 @Component
 public class ReservaNotificationPublisher {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ReservaNotificationPublisher.class);
+    private static final String AGGREGATE_TYPE = "Reserva";
 
-    private final KafkaTemplate<String, ReservaNotificationEvent> kafkaTemplate;
+    private final OutboxPublisher outboxPublisher;
+    private final String topic;
 
-    @Value("${app.kafka.topics.reserva-notifications}")
-    private String topic;
-
-    public ReservaNotificationPublisher(KafkaTemplate<String, ReservaNotificationEvent> kafkaTemplate) {
-        this.kafkaTemplate = kafkaTemplate;
+    public ReservaNotificationPublisher(OutboxPublisher outboxPublisher,
+                                        @Value("${app.kafka.topics.reserva-notifications}") String topic) {
+        this.outboxPublisher = outboxPublisher;
+        this.topic = topic;
     }
 
     public void publish(ReservaNotificationEvent event) {
-        try {
-            String key = event.getReservaId() != null ? String.valueOf(event.getReservaId()) : null;
-            kafkaTemplate.send(topic, key, event);
-            LOGGER.info("[KAFKA] ReservaNotification published for reservaId: {}", event.getReservaId());
-        } catch (Exception e) {
-            LOGGER.error("[KAFKA] Error publishing ReservaNotification: {}", e.getMessage(), e);
-        }
+        String aggregateId = event.getReservaId() != null ? event.getReservaId().toString() : null;
+        outboxPublisher.publish(
+                topic,
+                AGGREGATE_TYPE,
+                aggregateId,
+                event.getEventType(),
+                event
+        );
+        LOGGER.debug("[OUTBOX] Encolado {} reservaId={}",
+                event.getEventType(), event.getReservaId());
     }
 }
