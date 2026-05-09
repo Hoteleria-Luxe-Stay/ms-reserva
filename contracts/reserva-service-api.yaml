@@ -78,11 +78,11 @@ paths:
   /reservas/{id}/iniciar-pago:
     post:
       tags: [reservas]
-      summary: Iniciar pago de la reserva (SAGA — crea Stripe Checkout Session)
+      summary: Iniciar pago de la reserva (SAGA — crea MercadoPago Preference)
       description: |
         Transiciona la reserva de PENDIENTE_PAGO a PAGO_EN_PROCESO y crea una
-        Stripe Checkout Session via ms-pago. Devuelve el checkoutUrl al que el
-        frontend debe redirigir al usuario.
+        MercadoPago Preference (Checkout Pro) via ms-pago. Devuelve el checkoutUrl
+        al que el frontend debe redirigir al usuario.
 
         Requiere header `Idempotency-Key: <UUID v4>` (validado en api-gateway).
       operationId: iniciarPago
@@ -108,7 +108,7 @@ paths:
         '404':
           description: Reserva no encontrada
         '502':
-          description: ms-pago / Stripe no disponible
+          description: ms-pago / MercadoPago no disponible
         '503':
           description: ms-pago caido (circuit breaker abierto)
 

@@ -238,9 +238,9 @@ public class ReservaService {
     /**
      * SAGA — paso 1 del orquestador.
      *
-     * Transiciona la reserva a PAGO_EN_PROCESO y crea una Stripe Checkout Session
+     * Transiciona la reserva a PAGO_EN_PROCESO y crea una MercadoPago Preference
      * via ms-pago. El metodo NO es @Transactional porque hacemos un call externo
-     * largo (Stripe) y no queremos sostener la transaccion DB durante esa I/O.
+     * largo (MercadoPago) y no queremos sostener la transaccion DB durante esa I/O.
      *
      * Estructura:
      *   1. {@link #marcarPagoEnProceso(Long)} (transactional, fast) — valida estado
@@ -302,7 +302,7 @@ public class ReservaService {
     /**
      * Confirma una reserva. Renombrado de 'confirmarPago' a 'confirmar' porque
      * el metodo NO procesa pago real — solo cambia el estado. El cobro real lo
-     * gestiona la SAGA con ms-pago + Stripe (Ronda 5.3).
+     * gestiona la SAGA con ms-pago + MercadoPago (Ronda 5.3 / 8).
      *
      * Solo es valido transicionar a CONFIRMADA desde PAGO_EN_PROCESO (state machine).
      */

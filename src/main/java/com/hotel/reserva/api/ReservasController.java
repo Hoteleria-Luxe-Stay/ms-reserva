@@ -21,6 +21,7 @@ import org.springframework.web.context.request.NativeWebRequest;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @RestController
 public class ReservasController implements ReservasApi {
@@ -76,7 +77,7 @@ public class ReservasController implements ReservasApi {
     }
 
     @Override
-    public ResponseEntity<IniciarPagoResponse> iniciarPago(Long id, String idempotencyKey) {
+    public ResponseEntity<IniciarPagoResponse> iniciarPago(Long id, UUID idempotencyKey) {
         AuthTokenValidationResponse auth = AuthUtils.getAuth(getRequest());
         if (auth == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();

@@ -38,6 +38,9 @@ public class OutboxRelayService {
     @Value("${app.outbox.send-timeout-ms:5000}")
     private long sendTimeoutMs;
 
+    @Value("${app.outbox.max-attempts:10}")
+    private int maxAttempts;
+
     public OutboxRelayService(OutboxEventRepository outboxRepository,
                               KafkaTemplate<String, String> outboxKafkaTemplate) {
         this.outboxRepository = outboxRepository;
@@ -59,10 +62,17 @@ public class OutboxRelayService {
                 event.setLastError(null);
                 sent++;
             } catch (Exception ex) {
-                event.setAttempts(event.getAttempts() + 1);
+                int attempts = event.getAttempts() + 1;
+                event.setAttempts(attempts);
                 event.setLastError(truncate(ex.getMessage(), 1000));
-                LOGGER.error("[OUTBOX] Fallo publicando evento id={} topic={}: {}",
-                        event.getId(), event.getTopic(), ex.getMessage());
+                if (attempts >= maxAttempts) {
+                    event.setDead(true);
+                    LOGGER.error("[OUTBOX][DEAD] Evento id={} topic={} marcado dead tras {} intentos. Ultimo error: {}",
+                            event.getId(), event.getTopic(), attempts, ex.getMessage());
+                } else {
+                    LOGGER.error("[OUTBOX] Fallo publicando evento id={} topic={} attempt={}/{}: {}",
+                            event.getId(), event.getTopic(), attempts, maxAttempts, ex.getMessage());
+                }
             }
         }
         outboxRepository.saveAll(batch);

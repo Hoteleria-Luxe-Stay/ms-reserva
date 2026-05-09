@@ -1,11 +1,17 @@
 package com.hotel.reserva.infrastructure.events;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+
 /**
  * Evento que ms-pago publica en topic 'pago.events'.
  *
- * Wire format definido por el publisher (ms-pago/PagoEvent):
+ * Wire format definido por el publisher (ms-pago/PagoEvent) — DEBE matchear 1:1
+ * con esa clase para evitar perdida de datos en deserializacion.
+ *
  *  - eventType: "PagoCreado" | "PagoAprobado" | "PagoRechazado"
  *  - PascalCase, camelCase fields.
+ *  - monto: BigDecimal (NO Double — perderia precision en montos grandes).
  *
  * Tipos relevantes para el SAGA orchestrator de reservas:
  *  - PagoAprobado  → la reserva debe pasar a CONFIRMADA
@@ -22,8 +28,9 @@ public class PagoEvent {
     private String estado;
     private String gatewayPaymentId;
     private String moneda;
-    private Double monto;
+    private BigDecimal monto;
     private String errorMessage;
+    private LocalDateTime timestamp;
 
     public PagoEvent() {
     }
@@ -46,9 +53,12 @@ public class PagoEvent {
     public String getMoneda() { return moneda; }
     public void setMoneda(String moneda) { this.moneda = moneda; }
 
-    public Double getMonto() { return monto; }
-    public void setMonto(Double monto) { this.monto = monto; }
+    public BigDecimal getMonto() { return monto; }
+    public void setMonto(BigDecimal monto) { this.monto = monto; }
 
     public String getErrorMessage() { return errorMessage; }
     public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
+
+    public LocalDateTime getTimestamp() { return timestamp; }
+    public void setTimestamp(LocalDateTime timestamp) { this.timestamp = timestamp; }
 }

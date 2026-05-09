@@ -57,6 +57,9 @@ public class OutboxEvent {
     @Column(name = "last_error", length = 1000)
     private String lastError;
 
+    @Column(name = "dead", nullable = false)
+    private boolean dead;
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
@@ -92,4 +95,7 @@ public class OutboxEvent {
 
     public String getLastError() { return lastError; }
     public void setLastError(String lastError) { this.lastError = lastError; }
+
+    public boolean isDead() { return dead; }
+    public void setDead(boolean dead) { this.dead = dead; }
 }

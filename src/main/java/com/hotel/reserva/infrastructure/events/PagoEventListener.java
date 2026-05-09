@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
  * Consumer del topic 'pago.events' que publica ms-pago.
  *
  * Este consumer es la SEGUNDA mitad del SAGA orchestrator: ms-reserva inicio el pago,
- * el usuario paga (o no) en Stripe, ms-pago recibe el webhook y publica el evento,
+ * el usuario paga (o no) en MercadoPago, ms-pago recibe el webhook y publica el evento,
  * y ESTE listener cierra el ciclo transicionando la reserva.
  *
  * Idempotencia: el handler verifica el estado actual de la reserva antes de

@@ -18,14 +18,14 @@ import java.util.List;
  * IMPORTANTE — solo procesamos PENDIENTE_PAGO, no PAGO_EN_PROCESO.
  *
  * Por que: si una reserva esta en PAGO_EN_PROCESO significa que el usuario clickeo
- * "Pagar", el frontend lo redirigio a Stripe Checkout, y estamos esperando el webhook
- * con el resultado del cobro. Si el job expirara estas reservas, podriamos llegar a
- * marcar EXPIRADA una reserva que JUSTO se cobro y todavia no llego el webhook —
- * race condition que termina en un cliente cobrado sin reserva.
+ * "Pagar", el frontend lo redirigio a MercadoPago Checkout, y estamos esperando el
+ * webhook con el resultado del cobro. Si el job expirara estas reservas, podriamos
+ * llegar a marcar EXPIRADA una reserva que JUSTO se cobro y todavia no llego el
+ * webhook — race condition que termina en un cliente cobrado sin reserva.
  *
- * Para PAGO_EN_PROCESO confiamos exclusivamente en el webhook de Stripe (que llegara
- * en segundos o, en el peor caso, despues del retry de Stripe). El cliente "expirado"
- * sin webhook se resuelve manualmente con reembolso.
+ * Para PAGO_EN_PROCESO confiamos exclusivamente en el webhook de MercadoPago (que
+ * llegara en segundos o, en el peor caso, despues del retry de MP). El cliente
+ * "expirado" sin webhook se resuelve manualmente con reembolso.
  *
  * Por eso aca filtramos solo PENDIENTE_PAGO.
  */

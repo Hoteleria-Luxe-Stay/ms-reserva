@@ -112,7 +112,7 @@ public class ReservaSagaHandler {
             return;
         }
         // Solo expiramos PENDIENTE_PAGO. Si esta en PAGO_EN_PROCESO el usuario ya
-        // arranco el flujo en Stripe — el webhook va a resolver la SAGA.
+        // arranco el flujo en MercadoPago — el webhook va a resolver la SAGA.
         if (reserva.getEstado() != EstadoReserva.PENDIENTE_PAGO) {
             return;
         }

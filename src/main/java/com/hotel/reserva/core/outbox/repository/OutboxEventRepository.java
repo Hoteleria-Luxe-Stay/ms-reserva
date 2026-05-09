@@ -17,7 +17,7 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> 
      */
     @Query(value = """
             SELECT * FROM outbox_event
-            WHERE sent = 0
+            WHERE sent = 0 AND dead = 0
             ORDER BY id ASC
             LIMIT :batchSize
             FOR UPDATE SKIP LOCKED

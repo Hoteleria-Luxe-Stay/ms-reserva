@@ -24,7 +24,7 @@ public class ReservaMapper {
         response.setFechaFin(reserva.getFechaFin());
         response.setFechaCancelacion(reserva.getFechaCancelacion());
         response.setTotal(reserva.getTotal());
-        response.setEstado(reserva.getEstado());
+        response.setEstado(reserva.getEstado() != null ? reserva.getEstado().name() : null);
         response.setMotivoCancelacion(reserva.getMotivoCancelacion());
         response.setHotel(toHotelSimple(reserva));
         response.setCliente(ClienteMapper.toResponse(reserva.getCliente()));
@@ -42,7 +42,7 @@ public class ReservaMapper {
         response.setFechaFin(reserva.getFechaFin());
         response.setFechaCancelacion(reserva.getFechaCancelacion());
         response.setTotal(reserva.getTotal());
-        response.setEstado(reserva.getEstado());
+        response.setEstado(reserva.getEstado() != null ? reserva.getEstado().name() : null);
         response.setMotivoCancelacion(reserva.getMotivoCancelacion());
         response.setHotel(toHotelSimple(reserva));
         response.setCliente(ClienteMapper.toSimple(reserva.getCliente()));
@@ -60,7 +60,7 @@ public class ReservaMapper {
         response.setFechaFin(reserva.getFechaFin());
         response.setFechaCancelacion(reserva.getFechaCancelacion());
         response.setTotal(reserva.getTotal());
-        response.setEstado(reserva.getEstado());
+        response.setEstado(reserva.getEstado() != null ? reserva.getEstado().name() : null);
         response.setMotivoCancelacion(reserva.getMotivoCancelacion());
         response.setMensaje("Reserva creada exitosamente");
         return response;
@@ -73,7 +73,7 @@ public class ReservaMapper {
         response.setFechaFin(reserva.getFechaFin());
         response.setFechaCancelacion(reserva.getFechaCancelacion());
         response.setTotal(reserva.getTotal());
-        response.setEstado(reserva.getEstado());
+        response.setEstado(reserva.getEstado() != null ? reserva.getEstado().name() : null);
         response.setMotivoCancelacion(reserva.getMotivoCancelacion());
         response.setHotelNombre(reserva.getHotelNombre());
         response.setCantidadHabitaciones(reserva.getDetalles() != null ? reserva.getDetalles().size() : 0);
