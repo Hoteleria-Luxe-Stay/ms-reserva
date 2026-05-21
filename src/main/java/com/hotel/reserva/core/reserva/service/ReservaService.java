@@ -268,13 +268,20 @@ public class ReservaService {
         });
 
         try {
+            // Las URLs configuradas (app.pago.success-url, cancel-url) usan el placeholder
+            // {reservaId}. Lo reemplazamos por el id real para que MP redirija al detalle
+            // especifico tras pagar. Si el .env no tiene el placeholder, replace es no-op.
+            String idStr = reserva.getId().toString();
+            String successUrl = pagoSuccessUrl.replace("{reservaId}", idStr);
+            String cancelUrl = pagoCancelUrl.replace("{reservaId}", idStr);
+
             CrearPagoInternalRequest request = new CrearPagoInternalRequest(
                     reserva.getId(),
                     BigDecimal.valueOf(reserva.getTotal()).setScale(2, RoundingMode.HALF_UP),
                     defaultCurrency,
                     "Reserva #" + reserva.getId() + " - " + safe(reserva.getHotelNombre()),
-                    pagoSuccessUrl,
-                    pagoCancelUrl
+                    successUrl,
+                    cancelUrl
             );
             return pagoInternalApi.crearPago(request);
         } catch (RuntimeException ex) {
